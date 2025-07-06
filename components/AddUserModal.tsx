@@ -19,9 +19,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { createUser } from "@/lib/Utilisateurs";
 import { uploadImageToFirebase } from "@/lib/firebase-upload";
 
-// 💡 Définir les rôles autorisés
-type Role = "EMPLOYE" | "ADMIN" | "DIRECTEUR";
-
 // ✅ Schéma Zod pour la validation
 const userSchema = z.object({
   nom: z.string().min(2, "Nom requis"),

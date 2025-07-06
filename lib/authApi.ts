@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // lib/authApi.ts
 import API from "./api"; // Importation de l'instance Axios
 import { UserProfile } from "@/type/userProfileTypes";
@@ -14,7 +13,6 @@ export const login = async (
   try {
     const response = await API.post<LoginResponse>("/auth/login", credentials);
     return response.data;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     throw new Error(
       error?.response?.data?.message || "Erreur lors de la connexion"

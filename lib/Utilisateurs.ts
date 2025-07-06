@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import API from "./api";
 import { Users, PaginationInfo, UserPayload } from "../type/user";
+import { User } from "@/type/userProfileTypes";
 export const fetchUsers = async (
   page: number = 1,
   itemsPerPage: number = 10

@@ -126,7 +126,7 @@ const Header = () => {
               <p className="text-sm text-gray-500">{profil.email}</p>
               <p className="text-xs text-gray-400 mt-1">{profil.role}</p>
             </div>
-            <div className="flex flex-col gap-2 hidden">
+            <div className=" flex-col gap-2 hidden">
               <Button variant="secondary" onClick={() => setIsModalOpen(true)}>
                 Modifier
               </Button>
