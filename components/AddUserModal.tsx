@@ -1,5 +1,13 @@
 "use client";
-
+import imageCompression from "browser-image-compression";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import axios from "axios";
+import { toast } from "react-toastify";
+import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
+import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -10,14 +18,22 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Mail, Lock, User, Phone, Globe } from "lucide-react";
-import { toast } from "react-toastify";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  Plus,
+  Mail,
+  Lock,
+  User,
+  Phone,
+  Globe,
+  Image as ImageIcon,
+} from "lucide-react";
+
+interface CloudinaryUploadResponse {
+  secure_url: string;
+  public_id: string;
+}
+
 import { createUser } from "@/lib/Utilisateurs";
-import { uploadImageToFirebase } from "@/lib/firebase-upload";
 
 // ✅ Schéma Zod pour la validation
 const userSchema = z.object({
@@ -37,6 +53,7 @@ type UserFormData = z.infer<typeof userSchema>;
 export default function AddUserModal({ onSuccess }: { onSuccess: () => void }) {
   const [open, setOpen] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   // 🎯 Initialisation du form avec react-hook-form + zod
@@ -59,44 +76,93 @@ export default function AddUserModal({ onSuccess }: { onSuccess: () => void }) {
     },
   });
 
-  // ✅ Fonction appelée lors de la soumission
+  // ✅ Upload image vers Cloudinary
+  const uploadImageToCloudinary = async (
+    file: File
+  ): Promise<{ url: string; publicId: string } | null> => {
+    // pression et redimensionnement
+  const compressedFile = await imageCompression(file, {
+    maxSizeMB: 1, // taille max 1MB
+    maxWidthOrHeight: 1920,
+    useWebWorker: true,
+  });
+
+    const formData = new FormData();
+      formData.append("file", compressedFile);
+    formData.append("upload_preset", "nextjs_upload"); // ⚠️ Change si besoin
+
+    const uploadUrl = "https://api.cloudinary.com/v1_1/dpy1l2gm9/image/upload";
+
+    try {
+      const res = await axios.post<CloudinaryUploadResponse>(
+        uploadUrl,
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      return {
+        url: res.data.secure_url,
+        publicId: res.data.public_id,
+      };
+    } catch (error: any) {
+      console.error(
+        "❌ Cloudinary Error:",
+        error.response?.data || error.message
+      );
+      toast.error(error.response?.data?.error?.message || "Échec de l'upload");
+    }
+  };
+
+  // ✅ Soumission du formulaire
   const onSubmit = async (data: UserFormData) => {
     try {
       setLoading(true);
 
-      console.log("✅ Données valides :", data);
-      console.log("🖼️ Image sélectionnée :", imageFile);
-
-      // ✅ Image par défaut si aucune image fournie
       let url_photo_profil =
         "https://cdn2.iconfinder.com/data/icons/4web-3/139/header-account-image-line-512.png";
 
       if (imageFile) {
-        const uploadedUrl = await uploadImageToFirebase(imageFile);
+        const uploadedUrl = await uploadImageToCloudinary(imageFile);
         if (uploadedUrl) {
-          url_photo_profil = uploadedUrl;
+          url_photo_profil = uploadedUrl.url;
         }
       }
-
+      // publicId: uploadedUrl?.publicId || null,
       const userPayload = {
         ...data,
         url_photo_profil,
       };
 
-      console.log("📦 Payload envoyé à l'API :", userPayload);
-
       await createUser(userPayload);
       toast.success("Utilisateur ajouté !");
       onSuccess();
       setOpen(false);
-    } catch (err: any) {
-      console.error("❌ Erreur :", err);
-      toast.error(err.message || "Erreur lors de l'ajout");
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { message?: string } } };
+      toast.error(error.response?.data?.message || "Une erreur est survenue");
     } finally {
       setLoading(false);
     }
   };
 
+  // ✅ Gestion du changement de fichier avec prévisualisation
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    if (!file) return;
+
+    // Limite côté client
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Fichier trop volumineux (max 10MB)");
+      return;
+    }
+
+    setImageFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+  };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -111,147 +177,181 @@ export default function AddUserModal({ onSuccess }: { onSuccess: () => void }) {
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* === CHAMPS TEXTE === */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* Nom */}
-            <div className="relative">
-              <Label htmlFor="nom" className="mb-2">
-                Nom
-              </Label>
-              <span className="absolute left-2 top-7 text-gray-400">
-                <User className="w-5 h-5" />
-              </span>
-              <Input {...register("nom")} className="pl-10" id="nom" />
-              {errors.nom && (
-                <p className="text-red-500 text-sm">{errors.nom.message}</p>
-              )}
-            </div>
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          className="space-y-6 max-h-[80vh] overflow-y-auto"
+        >
+          {/* === INFOS UTILISATEUR === */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Informations du destinataire</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Nom */}
+              <div className="relative">
+                <Label htmlFor="nom" className="mb-2">
+                  Nom
+                </Label>
+                <span className="absolute left-2 top-7 text-gray-400">
+                  <User className="w-5 h-5" />
+                </span>
+                <Input {...register("nom")} className="pl-10" id="nom" />
+                {errors.nom && (
+                  <p className="text-red-500 text-sm">{errors.nom.message}</p>
+                )}
+              </div>
 
-            {/* Prénom */}
-            <div className="relative">
-              <Label htmlFor="prenom" className="mb-2">
-                Prénom
-              </Label>
-              <span className="absolute left-2 top-7 text-gray-400">
-                <User className="w-5 h-5" />
-              </span>
-              <Input {...register("prenom")} className="pl-10" id="prenom" />
-              {errors.prenom && (
-                <p className="text-red-500 text-sm">{errors.prenom.message}</p>
-              )}
-            </div>
+              {/* Prénom */}
+              <div className="relative">
+                <Label htmlFor="prenom" className="mb-2">
+                  Prénom
+                </Label>
+                <span className="absolute left-2 top-7 text-gray-400">
+                  <User className="w-5 h-5" />
+                </span>
+                <Input {...register("prenom")} className="pl-10" id="prenom" />
+                {errors.prenom && (
+                  <p className="text-red-500 text-sm">
+                    {errors.prenom.message}
+                  </p>
+                )}
+              </div>
 
-            {/* Email */}
-            <div className="relative">
-              <Label htmlFor="email" className="mb-2">
-                Email
-              </Label>
-              <span className="absolute left-2 top-7 text-gray-400">
-                <Mail className="w-5 h-5" />
-              </span>
+              {/* Email */}
+              <div className="relative">
+                <Label htmlFor="email" className="mb-2">
+                  Email
+                </Label>
+                <span className="absolute left-2 top-7 text-gray-400">
+                  <Mail className="w-5 h-5" />
+                </span>
+                <Input
+                  {...register("email")}
+                  type="email"
+                  className="pl-10"
+                  id="email"
+                />
+                {errors.email && (
+                  <p className="text-red-500 text-sm">{errors.email.message}</p>
+                )}
+              </div>
+
+              {/* Téléphone */}
+              <div className="relative">
+                <Label htmlFor="tel" className="mb-2">
+                  Téléphone
+                </Label>
+                <span className="absolute left-2 top-7 text-gray-400">
+                  <Phone className="w-5 h-5" />
+                </span>
+                <Input {...register("tel")} className="pl-10" id="tel" />
+                {errors.tel && (
+                  <p className="text-red-500 text-sm">{errors.tel.message}</p>
+                )}
+              </div>
+
+              {/* Pays */}
+              <div className="relative">
+                <Label htmlFor="pays" className="mb-2">
+                  Pays
+                </Label>
+                <span className="absolute left-2 top-7 text-gray-400">
+                  <Globe className="w-5 h-5" />
+                </span>
+                <Input {...register("pays")} className="pl-10" id="pays" />
+                {errors.pays && (
+                  <p className="text-red-500 text-sm">{errors.pays.message}</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Separator />
+
+          {/* === PARAMÈTRES D’ACCÈS === */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Paramètres d’accès</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Mot de passe */}
+              <div className="relative">
+                <Label htmlFor="password" className="mb-2">
+                  Mot de passe
+                </Label>
+                <span className="absolute left-2 top-7 text-gray-400">
+                  <Lock className="w-5 h-5" />
+                </span>
+                <Input
+                  {...register("password")}
+                  type="password"
+                  className="pl-10"
+                  id="password"
+                />
+                {errors.password && (
+                  <p className="text-red-500 text-sm">
+                    {errors.password.message}
+                  </p>
+                )}
+              </div>
+
+              {/* Rôle */}
+              <div>
+                <Label htmlFor="role" className="mb-2">
+                  Rôle
+                </Label>
+                <select
+                  {...register("role")}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2"
+                  id="role"
+                >
+                  <option value="EMPLOYE">Employé</option>
+                  <option value="ADMIN">Admin</option>
+                  <option value="DIRECTEUR">Directeur</option>
+                  <option value="SUPER_ADMIN">Super Admin</option>
+                </select>
+              </div>
+
+              {/* Accès Web & Mobile */}
+              <div className="md:col-span-2 flex gap-4 mt-2">
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" {...register("webAccess")} /> Accès Web
+                </label>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" {...register("mobileAccess")} /> Accès
+                  Mobile
+                </label>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Separator />
+
+          {/* === IMAGE === */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Photo de profil</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col items-center gap-4">
+              {previewUrl ? (
+                <img
+                  src={previewUrl}
+                  alt="Prévisualisation"
+                  className="w-24 h-24 rounded-full object-cover border"
+                />
+              ) : (
+                <div className="w-24 h-24 rounded-full border flex items-center justify-center text-gray-400">
+                  <ImageIcon className="w-10 h-10" />
+                </div>
+              )}
               <Input
-                {...register("email")}
-                type="email"
-                className="pl-10"
-                id="email"
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                id="file"
               />
-              {errors.email && (
-                <p className="text-red-500 text-sm">{errors.email.message}</p>
-              )}
-            </div>
-
-            {/* Téléphone */}
-            <div className="relative">
-              <Label htmlFor="tel" className="mb-2">
-                Téléphone
-              </Label>
-              <span className="absolute left-2 top-7 text-gray-400">
-                <Phone className="w-5 h-5" />
-              </span>
-              <Input {...register("tel")} className="pl-10" id="tel" />
-              {errors.tel && (
-                <p className="text-red-500 text-sm">{errors.tel.message}</p>
-              )}
-            </div>
-
-            {/* Mot de passe */}
-            <div className="relative">
-              <Label htmlFor="password" className="mb-2">
-                Mot de passe
-              </Label>
-              <span className="absolute left-2 top-7 text-gray-400">
-                <Lock className="w-5 h-5" />
-              </span>
-              <Input
-                {...register("password")}
-                type="password"
-                className="pl-10"
-                id="password"
-              />
-              {errors.password && (
-                <p className="text-red-500 text-sm">
-                  {errors.password.message}
-                </p>
-              )}
-            </div>
-
-            {/* Pays */}
-            <div className="relative">
-              <Label htmlFor="pays" className="mb-2">
-                Pays
-              </Label>
-              <span className="absolute left-2 top-7 text-gray-400">
-                <Globe className="w-5 h-5" />
-              </span>
-              <Input {...register("pays")} className="pl-10" id="pays" />
-              {errors.pays && (
-                <p className="text-red-500 text-sm">{errors.pays.message}</p>
-              )}
-            </div>
-          </div>
-
-          {/* === RÔLE === */}
-          <div>
-            <Label htmlFor="role" className="mb-2">
-              Rôle
-            </Label>
-            <select
-              {...register("role")}
-              className="w-full rounded-md border border-gray-300 px-3 py-2"
-              id="role"
-            >
-              <option value="EMPLOYE">Employé</option>
-              <option value="ADMIN">Admin</option>
-              <option value="DIRECTEUR">Directeur</option>
-              <option value="SUPER_ADMIN">Super Admin</option>
-            </select>
-          </div>
-
-          {/* === ACCÈS === */}
-          <div className="flex gap-4 mt-2">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" {...register("webAccess")} />
-              Accès Web
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" {...register("mobileAccess")} />
-              Accès Mobile
-            </label>
-          </div>
-
-          {/* === UPLOAD IMAGE === */}
-          <div>
-            <Label htmlFor="file" className="mb-2">
-              Photo de profil
-            </Label>
-            <Input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setImageFile(e.target.files?.[0] || null)}
-              id="file"
-            />
-          </div>
+            </CardContent>
+          </Card>
 
           {/* === BOUTON ENVOYER === */}
           <div className="flex justify-end">

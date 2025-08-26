@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // context/authContext.tsx
 "use client";
 
@@ -43,16 +44,39 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const loginUser = async (credentials: LoginCredentials) => {
-    const res = await login(credentials);
+    const res: any = await login(credentials);
 
+    // Vérifier les droits d'accès
+    // Supposons que tu envoies un header "X-Device-Type" pour distinguer mobile/web
+    // Ici, on détermine deviceType côté frontend (exemple pour web)
+    const deviceType = window.navigator.userAgent.match(/Mobi|Android/i)
+      ? "mobile"
+      : "web";
+
+    const user = res.user;
+
+    if (deviceType === "web" && !user.webAccess) {
+      throw new Error(
+        "Accès refusé : vous ne pouvez pas vous connecter depuis un PC."
+      );
+    }
+
+    if (deviceType === "mobile" && !user.mobileAccess) {
+      throw new Error(
+        "Accès refusé : vous ne pouvez pas vous connecter depuis un mobile."
+      );
+    }
+
+    // Sinon tout va bien : on sauvegarde les tokens
     localStorage.setItem("accessToken", res.accessToken);
     localStorage.setItem("refreshToken", res.refreshToken);
 
+    // Charger profil complet (optionnel si déjà dans res.user)
     const profile = await getProfile();
     setUser(profile);
+
     router.push("/dashboard");
   };
-
   const logoutUser = async () => {
     await logout();
     setUser(null);

@@ -33,11 +33,12 @@ export default function Home() {
 
   const onSubmit = async (data: FormData) => {
     try {
-      await loginUser(data); // ✅ Appel direct au contexte
+      await loginUser(data);
       toast.success("Connexion réussie !");
     } catch (error: any) {
       const errorMessage =
-        error?.response?.data?.message ||
+        error?.response?.data?.message || // Erreur axios API
+        error?.message || // Erreur JS normale (throw new Error)
         "Une erreur est survenue. Veuillez réessayer.";
       toast.error(`Erreur de connexion : ${errorMessage}`);
     }

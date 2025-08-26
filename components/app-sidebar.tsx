@@ -18,12 +18,12 @@ import { useAuth } from "@/app/context/authContext";
 const items = [
   {
     title: "Utilisateurs",
-    url: "#",
+    url: "/dashboard",
     icon: Users,
   },
   {
     title: "Colis",
-    url: "#",
+    url: "/Colis",
     icon: Package,
   },
 ];
