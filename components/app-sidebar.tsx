@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { Users, Package, LogOut } from "lucide-react";
+import { Users, Package, LogOut, BarChart2 } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -15,6 +15,7 @@ import {
 import { toast } from "react-toastify";
 import { useAuth } from "@/app/context/authContext";
 
+// ✅ Liste des items du menu
 const items = [
   {
     title: "Utilisateurs",
@@ -26,10 +27,16 @@ const items = [
     url: "/Colis",
     icon: Package,
   },
+  {
+    title: "Statistiques",
+    url: "/statistiques",
+    icon: BarChart2,
+  },
 ];
 
 export function AppSidebar() {
   const { logoutUser } = useAuth(); // ⬅️ Utilise le contexte ici
+
   const handleLogout = async () => {
     try {
       await logoutUser(); // ✅ Appelle le logout du contexte
@@ -55,6 +62,10 @@ export function AppSidebar() {
                     <SidebarMenuButton asChild>
                       <a
                         href={item.url}
+                        target={
+                          item.url.startsWith("http") ? "_blank" : "_self"
+                        }
+                        rel="noreferrer"
                         className="flex items-center space-x-2"
                       >
                         <item.icon className="w-5 h-5" />

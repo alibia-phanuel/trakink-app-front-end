@@ -97,7 +97,6 @@ const Header = () => {
       </div>
 
       <div className="flex items-center gap-4">
-        <NotificationBell />
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-2 focus:outline-none cursor-pointer">
             <Avatar className="w-9 h-9">

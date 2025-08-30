@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+
+import { useState, useRef } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@radix-ui/react-avatar";
 import { Users } from "@/type/user";
 import {
@@ -7,7 +8,6 @@ import {
   User,
   Phone,
   Globe,
-  ImageIcon,
   ShieldCheck,
   ShieldAlert,
   Webhook,
@@ -27,19 +27,72 @@ import {
 import { Input } from "@/components/ui/input";
 import { getUserById, updateUserById } from "@/lib/authApi";
 import { toast } from "react-toastify";
+import { uploadImageToCloudinary } from "@/lib/cloudinary";
 
 interface UsersTableProps {
   users: Users[];
   selectedIds: string[];
   onToggleSelect: (id: string) => void;
   onDeleted: () => void;
+  isLoading?: boolean; // Optional prop to explicitly handle loading state
 }
+
+// Skeleton Loader Component
+const SkeletonTable = () => {
+  return (
+    <table className="w-full table-auto border-collapse">
+      <thead>
+        <tr className="bg-gray-100 text-left text-sm text-gray-700">
+          <th className="p-3">
+            <div className="h-4 w-4 bg-gray-200 rounded animate-pulse" />
+          </th>
+          <th className="p-3">
+            <div className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
+          </th>
+          <th className="p-3">
+            <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
+          </th>
+          <th className="p-3">
+            <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
+          </th>
+          <th className="p-3">
+            <div className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {[...Array(5)].map((_, idx) => (
+          <tr key={idx} className="border-t border-gray-200">
+            <td className="p-3">
+              <div className="h-4 w-4 bg-gray-200 rounded animate-pulse" />
+            </td>
+            <td className="p-3 flex items-center gap-3">
+              <div className="h-10 w-10 bg-gray-200 rounded-full animate-pulse" />
+              <div className="h-4 w-32 bg-gray-200 rounded animate-pulse" />
+            </td>
+            <td className="p-3">
+              <div className="h-4 w-20 bg-gray-200 rounded animate-pulse" />
+            </td>
+            <td className="p-3">
+              <div className="h-4 w-16 bg-gray-200 rounded animate-pulse" />
+            </td>
+            <td className="p-3 flex gap-2">
+              <div className="h-8 w-8 bg-gray-200 rounded animate-pulse" />
+              <div className="h-8 w-8 bg-gray-200 rounded animate-pulse" />
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+};
 
 const UsersTable = ({
   users,
   selectedIds,
   onToggleSelect,
   onDeleted,
+  isLoading = false, // Default to false if not provided
 }: UsersTableProps) => {
   const isSelected = (id: string) => selectedIds.includes(id);
 
@@ -49,6 +102,7 @@ const UsersTable = ({
     prenom: "",
     tel: "",
     url_photo_profil: "",
+    imageId: "",
     role: "EMPLOYE" as "EMPLOYE" | "ADMIN" | "DIRECTEUR",
     status: "ACTIF" as "ACTIF" | "INACTIF",
     pays: "",
@@ -56,6 +110,9 @@ const UsersTable = ({
     mobileAccess: false,
   });
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleEditClick = async (userId: string) => {
     const res = await getUserById(userId);
@@ -65,13 +122,15 @@ const UsersTable = ({
         nom: user.nom,
         prenom: user.prenom,
         tel: user.tel,
-        url_photo_profil: user.url_photo_profil,
+        url_photo_profil: user.url_photo_profil || "",
+        imageId: user.imageId || "",
         role: user.role,
         status: user.status,
         pays: user.pays,
         webAccess: user.webAccess,
         mobileAccess: user.mobileAccess,
       });
+      setImagePreview(user.url_photo_profil || "");
       setEditingUserId(userId);
       setOpen(true);
     }
@@ -81,7 +140,6 @@ const UsersTable = ({
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     const target = e.target;
-
     if (target instanceof HTMLInputElement && target.type === "checkbox") {
       setFormData((prev) => ({
         ...prev,
@@ -94,17 +152,52 @@ const UsersTable = ({
       }));
     }
   };
+
   const handleSubmit = async () => {
     if (!editingUserId) return;
-    const res = await updateUserById(editingUserId, formData);
+
+    let url_photo_profil = formData.url_photo_profil;
+    let imageId: string | null = formData.imageId || null;
+
+    if (imageFile) {
+      const uploaded = await uploadImageToCloudinary(imageFile);
+      if (uploaded) {
+        url_photo_profil = uploaded.url;
+        imageId = uploaded.imageId;
+      }
+    }
+
+    const payload = {
+      ...formData,
+      url_photo_profil,
+      imageId,
+    };
+
+    const res = await updateUserById(editingUserId, payload);
     if (res.success) {
       setOpen(false);
       toast.success(res.message);
-      onDeleted(); // recharge les données
+      onDeleted();
     } else {
-      alert("Erreur lors de la mise à jour");
+      toast.error("Erreur lors de la mise à jour");
     }
   };
+
+  const handlePickImage = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.[0]) return;
+    const file = e.target.files[0];
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  // Show skeleton if isLoading is true or users is undefined/empty
+  if (isLoading || !users || users.length === 0) {
+    return <SkeletonTable />;
+  }
 
   return (
     <>
@@ -182,6 +275,30 @@ const UsersTable = ({
                       }}
                       className="space-y-3"
                     >
+                      {/* Avatar uploader */}
+                      <div className="flex flex-col items-center gap-2">
+                        <Avatar
+                          className="h-20 w-20 rounded-full cursor-pointer"
+                          onClick={handlePickImage}
+                        >
+                          <AvatarImage src={imagePreview} alt="Photo profil" />
+                          <AvatarFallback>
+                            {formData.nom[0]}
+                            {formData.prenom[0]}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-sm text-gray-500">
+                          Cliquer pour changer la photo
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          ref={fileInputRef}
+                          onChange={handleFileChange}
+                        />
+                      </div>
+
                       {/* Nom */}
                       <div className="relative">
                         <User className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
@@ -216,19 +333,6 @@ const UsersTable = ({
                           value={formData.tel}
                           onChange={handleChange}
                           placeholder="Téléphone"
-                          required
-                          className="pl-8"
-                        />
-                      </div>
-
-                      {/* URL photo */}
-                      <div className="relative">
-                        <ImageIcon className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
-                        <Input
-                          name="url_photo_profil"
-                          value={formData.url_photo_profil}
-                          onChange={handleChange}
-                          placeholder="URL photo"
                           required
                           className="pl-8"
                         />
@@ -300,7 +404,6 @@ const UsersTable = ({
                         </label>
                       </div>
 
-                      {/* Bouton */}
                       <div className="flex justify-end">
                         <Button type="submit">Mettre à jour</Button>
                       </div>

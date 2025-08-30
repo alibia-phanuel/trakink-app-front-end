@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
-import { deleteUser } from "@/lib/Utilisateurs";
+import { toast } from "react-toastify";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogTrigger,
@@ -10,8 +11,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { toast } from "react-toastify";
+import API from "@/lib/api";
 
 export function DeleteUserButton({
   userId,
@@ -24,14 +24,26 @@ export function DeleteUserButton({
   const [loading, setLoading] = useState(false);
 
   const handleDelete = async () => {
+    if (!userId) return;
     setLoading(true);
     try {
-      const message = await deleteUser(userId);
-      toast.success(message);
+      // ❌ avant : API.post("/users/delete", { userId })
+      // ✅ maintenant : DELETE sur /users/{id}
+      const res = await API.delete(`/users/${userId}`);
+      toast.success(res.data.message || "Utilisateur supprimé avec succès");
       setOpen(false);
-      onDeleted(); // recharge la liste
-    } catch (error: any) {
-      toast.error(error.message);
+      onDeleted();
+    } catch (err: any) {
+      console.error("❌ Erreur détaillée :", err);
+      if (err.response) {
+        toast.error(
+          `Erreur ${err.response.status} : ${
+            err.response.data?.message || JSON.stringify(err.response.data)
+          }`
+        );
+      } else {
+        toast.error(err.message || "Erreur inconnue lors de la suppression");
+      }
     } finally {
       setLoading(false);
     }

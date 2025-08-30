@@ -4,6 +4,15 @@ import { useAuth } from "@/app/context/authContext";
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
+// Skeleton Loader for ProtectedRoute
+const SkeletonProtectedRoute = () => {
+  return (
+    <div className="flex items-center justify-center h-screen bg-[#f5dcd3]">
+      <div className="w-64 h-12 bg-gray-200 rounded animate-pulse" />
+    </div>
+  );
+};
+
 export default function ProtectedRoute({
   children,
 }: {
@@ -19,11 +28,7 @@ export default function ProtectedRoute({
   }, [loading, isAuthenticated, router]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen text-gray-600">
-        Chargement des données utilisateur...
-      </div>
-    );
+    return <SkeletonProtectedRoute />;
   }
 
   if (!isAuthenticated) return null;

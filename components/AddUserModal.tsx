@@ -1,10 +1,9 @@
 "use client";
-import imageCompression from "browser-image-compression";
+
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import axios from "axios";
 import { toast } from "react-toastify";
 import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -28,12 +27,8 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 
-interface CloudinaryUploadResponse {
-  secure_url: string;
-  public_id: string;
-}
-
 import { createUser } from "@/lib/Utilisateurs";
+import { uploadImageToCloudinary } from "@/lib/cloudinary";
 
 // ✅ Schéma Zod pour la validation
 const userSchema = z.object({
@@ -76,68 +71,33 @@ export default function AddUserModal({ onSuccess }: { onSuccess: () => void }) {
     },
   });
 
-  // ✅ Upload image vers Cloudinary
-  const uploadImageToCloudinary = async (
-    file: File
-  ): Promise<{ url: string; publicId: string } | null> => {
-    // pression et redimensionnement
-  const compressedFile = await imageCompression(file, {
-    maxSizeMB: 1, // taille max 1MB
-    maxWidthOrHeight: 1920,
-    useWebWorker: true,
-  });
-
-    const formData = new FormData();
-      formData.append("file", compressedFile);
-    formData.append("upload_preset", "nextjs_upload"); // ⚠️ Change si besoin
-
-    const uploadUrl = "https://api.cloudinary.com/v1_1/dpy1l2gm9/image/upload";
-
-    try {
-      const res = await axios.post<CloudinaryUploadResponse>(
-        uploadUrl,
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
-
-      return {
-        url: res.data.secure_url,
-        publicId: res.data.public_id,
-      };
-    } catch (error: any) {
-      console.error(
-        "❌ Cloudinary Error:",
-        error.response?.data || error.message
-      );
-      toast.error(error.response?.data?.error?.message || "Échec de l'upload");
-    }
-  };
-
   // ✅ Soumission du formulaire
   const onSubmit = async (data: UserFormData) => {
     try {
       setLoading(true);
 
+      // Valeur par défaut de la photo de profil
       let url_photo_profil =
         "https://cdn2.iconfinder.com/data/icons/4web-3/139/header-account-image-line-512.png";
+      let imageId: string | null = null;
 
       if (imageFile) {
-        const uploadedUrl = await uploadImageToCloudinary(imageFile);
-        if (uploadedUrl) {
-          url_photo_profil = uploadedUrl.url;
+        const uploaded = await uploadImageToCloudinary(imageFile);
+        if (uploaded) {
+          url_photo_profil = uploaded.url;
+          imageId = uploaded.imageId;
         }
       }
-      // publicId: uploadedUrl?.publicId || null,
+
+      // Payload pour l'API
       const userPayload = {
         ...data,
         url_photo_profil,
+        imageId, // nouveau champ ajouté
       };
 
       await createUser(userPayload);
+
       toast.success("Utilisateur ajouté !");
       onSuccess();
       setOpen(false);
