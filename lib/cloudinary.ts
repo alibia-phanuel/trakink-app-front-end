@@ -1,7 +1,6 @@
 import { toast } from "react-toastify";
 import imageCompression from "browser-image-compression";
 import axios from "axios";
-
 interface CloudinaryUploadResponse {
   secure_url: string;
   public_id: string;
@@ -22,13 +21,9 @@ export const uploadImageToCloudinary = async (
     // FormData pour Cloudinary
     const formData = new FormData();
     formData.append("file", compressedFile);
-    formData.append(
-      "upload_preset",
-      process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET!
-    );
+    formData.append("upload_preset", "nextjs_upload");
 
-    // ✅ URL dynamique via .env
-    const uploadUrl = `https://api.cloudinary.com/v1_1/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload`;
+    const uploadUrl = "https://api.cloudinary.com/v1_1/dpy1l2gm9/image/upload";
 
     // Upload
     const res = await axios.post<CloudinaryUploadResponse>(
@@ -55,7 +50,6 @@ export const uploadImageToCloudinary = async (
     return null;
   }
 };
-
 // ✅ Upload plusieurs images vers Cloudinary
 export const uploadImagesToCloudinary = async (
   files: File[]

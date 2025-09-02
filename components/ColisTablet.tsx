@@ -1,8 +1,8 @@
 "use client";
 import { Checkbox } from "@/components/ui/checkbox";
- import { ColisPayload } from "@/type/colis";
-// import ColisEditDialog from "./ColisEditDialog";
-// import ColisStatutButton from "./ColisStatutButton";
+import { ColisPayload } from "@/type/colis";
+import { ColisEditDialog } from "@/components/ColisEditDialog";
+import { ColisStatutButton } from "@/components/ColisStatutButton";
 import { DeleteColisButton } from "./DeleteColisButton";
 
 interface Props {
@@ -46,7 +46,23 @@ export default function ColisList({
             </td>
             <td className="p-3">{c.nom_colis}</td>
             <td className="p-3">{c.nom_destinataire}</td>
-            <td className="p-3">{c.statut}</td>
+            <td className="p-3">
+              <span
+                className={`px-2 py-1 rounded-full text-sm font-medium ${
+                  c.statut === "RECU_DESTINATION"
+                    ? "bg-green-100 text-green-800"
+                    : c.statut === "QUITTE_CHINE"
+                    ? "bg-yellow-100 text-yellow-800"
+                    : "bg-gray-100 text-gray-600"
+                }`}
+              >
+                {c.statut === "RECU_DESTINATION"
+                  ? "Reçu à destination"
+                  : c.statut === "QUITTE_CHINE"
+                  ? "Quitte Chine"
+                  : c.statut}
+              </span>
+            </td>
             <td className="p-3">
               {c.images_colis?.[0] ? (
                 <img
@@ -59,12 +75,12 @@ export default function ColisList({
               )}
             </td>
             <td className="p-3 flex gap-2 flex-wrap">
-              {/* <ColisEditDialog colis={c} onUpdated={onDeleted} />
+              <ColisEditDialog colisId={c.id} onUpdated={onDeleted} />
               <ColisStatutButton
                 colisId={c.id}
-                statut={c.statut}
+                statut={c.statut as "RECU_DESTINATION" | "QUITTE_CHINE"}
                 onUpdated={onDeleted}
-              /> */}
+              />
               <DeleteColisButton colisId={c.id} onDeleted={onDeleted} />
             </td>
           </tr>
