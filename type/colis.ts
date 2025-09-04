@@ -1,10 +1,10 @@
 export interface ColisPayload {
-  id: string;
+  id?: string; // ⬅ rendu optionnel
+  statut?: string; // ⬅ rendu optionnel
   nom_destinataire: string;
   numero_tel_destinataire: string;
   email_destinataire: string;
   pays_destination: string;
-  statut: string;
   ville_destination: string;
   adresse_destinataire: string;
   nom_colis: string;
@@ -45,4 +45,15 @@ export interface ColisResponse {
       email: string;
     };
   };
+}
+
+/** Données minimales utilisées pour un PATCH ou un pré-remplissage de formulaire */
+export interface ColisUpdateData {
+  pays_destination: string;
+  ville_destination: string;
+  mode_envoi: string;
+  unite_mesure: string;
+  taille: number;
+  images_colis: string[];
+  imageId?: string[];
 }

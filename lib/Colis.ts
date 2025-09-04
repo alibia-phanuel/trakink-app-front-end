@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ColisPayload, ColisResponse } from "@/type/colis";
+import { ColisPayload, ColisResponse, ColisUpdateData } from "@/type/colis";
 import API from "./api"; // ton instance Axios
 import type { AxiosResponse } from "axios";
+import { deleteCloudinaryImages } from "./cloudinary";
 
 export const createColis = async (
   data: ColisPayload
@@ -140,3 +141,102 @@ export const updateColisStatut = async (
     throw err;
   }
 };
+
+/**
+ * Met à jour un colis via PATCH
+ * @param id UUID du colis
+ * @param data Champs à modifier
+ * @throws Error si 403 (colis déjà reçu / permissions) ou autre statut
+ */
+export async function patchColis(
+  id: string,
+  data: Partial<
+    Pick<
+      ColisPayload,
+      | "pays_destination"
+      | "ville_destination"
+      | "mode_envoi"
+      | "unite_mesure"
+      | "taille"
+      | "images_colis"
+      | "imageId"
+    >
+  >
+): Promise<ColisResponse> {
+  try {
+    const res = await API.patch<ColisResponse>(`/colis/${id}`, data, {
+      headers: { "Content-Type": "application/json" },
+    });
+    return res.data;
+  } catch (err: any) {
+    if (err.response) {
+      if (err.response.status === 403) {
+        throw new Error("Colis déjà reçu ou permissions insuffisantes");
+      }
+      throw new Error(
+        `Erreur API ${err.response.status}: ${JSON.stringify(
+          err.response.data
+        )}`
+      );
+    }
+    throw new Error(`Erreur inattendue: ${err.message || err}`);
+  }
+}
+
+/**
+ * GET /colis/:id → ne renvoie que les champs utiles pour MAJ
+ * @param id UUID du colis
+ * @returns Données restreintes à pays, ville, mode, unité, taille, images
+ */
+export async function getColisById(id: string): Promise<ColisUpdateData> {
+  try {
+    const res = await API.get<{ colis: ColisResponse["colis"] }>(
+      `/colis/${id}`
+    );
+    const c = res.data.colis;
+
+    const mapped: ColisUpdateData = {
+      pays_destination: c.pays_destination,
+      ville_destination: c.ville_destination,
+      mode_envoi: c.mode_envoi,
+      unite_mesure: c.unite_mesure,
+      taille: c.taille,
+      images_colis: c.images_colis,
+      imageId: c.imageId,
+    };
+
+    return mapped;
+  } catch (err: any) {
+    if (err.response) {
+      throw new Error(
+        `Erreur API ${err.response.status}: ${JSON.stringify(
+          err.response.data
+        )}`
+      );
+    }
+    throw new Error(`Erreur inattendue: ${err.message || err}`);
+  }
+}
+/**
+ * Supprime les anciennes images Cloudinary puis met à jour le colis
+ * @param colisId UUID du colis
+ * @param newData Nouvel état (images à conserver, + autres champs)
+ * @param oldImageIds Liste des images existantes avant édition
+ */
+export async function updateColisWithImages(
+  colisId: string,
+  newData: ColisUpdateData,
+  oldImageIds: string[]
+) {
+  // 1️⃣ repérer ce qui doit être supprimé
+  const toDelete = oldImageIds.filter((id) => !newData.imageId?.includes(id));
+
+  // 2️⃣ purge Cloudinary
+  if (toDelete.length) {
+    await deleteCloudinaryImages(toDelete);
+  }
+
+  // 3️⃣ PATCH du colis
+  const response = await patchColis(colisId, newData);
+  return response;
+}

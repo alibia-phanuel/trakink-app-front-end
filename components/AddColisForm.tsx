@@ -283,9 +283,10 @@ export default function ColisForm() {
                   </div>
                   {errors.images_colis_files?.message && (
                     <p className="text-red-500 text-sm">
-                      {errors.images_colis_files.message}
+                      {String(errors.images_colis_files.message)}
                     </p>
                   )}
+
                   {imagePreviews.length > 0 && (
                     <div className="mt-4 flex flex-wrap gap-2">
                       {imagePreviews.map((img, index) => (

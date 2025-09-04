@@ -40,8 +40,8 @@ export default function ColisList({
           >
             <td className="p-3">
               <Checkbox
-                checked={isSelected(c.id)}
-                onCheckedChange={() => onToggleSelect(c.id)}
+                checked={isSelected(c.id ?? "")}
+                onCheckedChange={() => onToggleSelect(c.id ?? "")}
               />
             </td>
             <td className="p-3">{c.nom_colis}</td>
@@ -75,13 +75,17 @@ export default function ColisList({
               )}
             </td>
             <td className="p-3 flex gap-2 flex-wrap">
-              <ColisEditDialog colisId={c.id} onUpdated={onDeleted} />
-              <ColisStatutButton
-                colisId={c.id}
-                statut={c.statut as "RECU_DESTINATION" | "QUITTE_CHINE"}
-                onUpdated={onDeleted}
-              />
-              <DeleteColisButton colisId={c.id} onDeleted={onDeleted} />
+              {c.id && <ColisEditDialog colisId={c.id} onUpdated={onDeleted} />}
+              {c.id && (
+                <ColisStatutButton
+                  colisId={c.id}
+                  statut={c.statut as "RECU_DESTINATION" | "QUITTE_CHINE"}
+                  onUpdated={onDeleted}
+                />
+              )}
+              {c.id && (
+                <DeleteColisButton colisId={c.id} onDeleted={onDeleted} />
+              )}
             </td>
           </tr>
         ))}

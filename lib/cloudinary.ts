@@ -57,3 +57,27 @@ export const uploadImagesToCloudinary = async (
   const uploadPromises = Array.from(files).map(uploadImageToCloudinary);
   return await Promise.all(uploadPromises);
 };
+// lib/cloudinary.ts
+/**
+ * Supprime une liste d'images Cloudinary via ton endpoint Next.js
+ * @param imageIds public_id[] à supprimer
+ * @throws Error si le serveur renvoie un code HTTP >=400
+ */
+export async function deleteCloudinaryImages(
+  imageIds: string[]
+): Promise<void> {
+  if (!imageIds?.length) return;
+
+  const res = await fetch("/api/cloudinary/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ imageIds }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(
+      `Erreur suppression Cloudinary: ${JSON.stringify(errorData)}`
+    );
+  }
+}
