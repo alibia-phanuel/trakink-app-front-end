@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { BarChart2, CheckCircle, Package, Loader } from "lucide-react";
-
+import Image from "next/image";
 import {
   BarChart,
   Bar,
@@ -148,17 +148,44 @@ export default function Page() {
         </h1>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="border-none shadow-lg hover:shadow-2xl transition-shadow duration-300">
-            <CardHeader>
-              <CardTitle>État</CardTitle>
-              <CardDescription className="flex items-center gap-2">
-                <Loader className="text-yellow-500" />
-              </CardDescription>
+          <Card className="border border-gray-100 shadow-lg hover:shadow-2xl transition-shadow duration-300 rounded-2xl">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                <Image
+                  src="/flag/china.png"
+                  alt="Drapeau Chine"
+                  width={28}
+                  height={20}
+                  className="rounded-sm"
+                />
+                <span>État</span>
+              </CardTitle>
+
+              {/* Loader pour montrer que ça charge / dynamique */}
+              <Loader className="animate-spin text-yellow-500 w-5 h-5" />
             </CardHeader>
-            <CardContent className="text-[#333]">
-              Colis reçus: {stats.stats.colisRecus} <br />
-              Colis quittés Chine: {stats.stats.colisQuittesChine} <br />
-              Taux de réception: {stats.stats.tauxReception}%
+
+            <CardDescription className="px-4 text-sm text-gray-500">
+              Suivi de la logistique vers l'afrique / depuis la Chine
+            </CardDescription>
+
+            <CardContent className="px-4 py-3 text-[#333] text-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Colis reçus</span>
+                <span className="font-semibold">{stats.stats.colisRecus}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Colis quittés Chine</span>
+                <span className="font-semibold">
+                  {stats.stats.colisQuittesChine}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">Taux de réception</span>
+                <span className="font-semibold">
+                  {stats.stats.tauxReception}%
+                </span>
+              </div>
             </CardContent>
           </Card>
 

@@ -1,3 +1,12 @@
+export interface PaginationMeta {
+  currentPage: number;
+  totalPages: number;
+  totalItems: number;
+  itemsPerPage: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+}
+
 export interface ColisPayload {
   id?: string; // ⬅ rendu optionnel
   statut?: string; // ⬅ rendu optionnel

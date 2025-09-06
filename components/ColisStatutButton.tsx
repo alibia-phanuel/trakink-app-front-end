@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRightCircle } from "lucide-react";
+import { ArrowRightCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,7 +12,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { updateColisStatut } from "@/lib/Colis"; // service typé
+import { updateColisStatut } from "@/lib/Colis";
 import { toast } from "react-toastify";
 
 interface Props {
@@ -34,19 +34,19 @@ export function ColisStatutButton({ colisId, statut, onUpdated }: Props) {
       const res = await updateColisStatut(colisId, newStatut);
 
       if (res.status === 200) {
-        toast.success(`Statut mis à jour avec succès`);
+        toast.success("✅ Statut du colis mis à jour !");
+        setLoading(false); // stop loader
+        setOpen(false); // ferme modal
+        onUpdated(); // refresh parent
       } else {
-        toast.info(`Statut du colis inchangé`);
+        setLoading(false);
+        toast.info("ℹ️ Statut du colis inchangé");
       }
-
-      onUpdated();
-      setOpen(false);
     } catch (err: any) {
       console.error("Erreur mise à jour statut :", err);
       toast.error(
-        err.response?.data?.message || "Impossible de changer le statut"
+        err?.response?.data?.message || "Impossible de changer le statut"
       );
-    } finally {
       setLoading(false);
     }
   };
@@ -69,8 +69,8 @@ export function ColisStatutButton({ colisId, statut, onUpdated }: Props) {
         <DialogHeader>
           <DialogTitle>Changer le statut du colis</DialogTitle>
           <DialogDescription>
-            Le statut actuel est : <strong>{statut}</strong>. Veux-tu le changer
-            ?
+            Le statut actuel est <strong>{statut}</strong>. Voulez-vous le
+            changer ?
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="flex justify-end gap-2">
@@ -81,9 +81,23 @@ export function ColisStatutButton({ colisId, statut, onUpdated }: Props) {
           >
             Annuler
           </Button>
-          <Button variant="default" onClick={toggleStatut} disabled={loading}>
-            Changer le statut
-            <ArrowRightCircle className="w-4 h-4 ml-2 inline" />
+          <Button
+            variant="default"
+            onClick={toggleStatut}
+            disabled={loading}
+            className="flex items-center"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Mise à jour…
+              </>
+            ) : (
+              <>
+                Changer le statut
+                <ArrowRightCircle className="w-4 h-4 ml-2" />
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
