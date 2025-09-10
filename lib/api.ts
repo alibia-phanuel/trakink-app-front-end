@@ -55,7 +55,8 @@ API.interceptors.response.use(
             originalRequest.headers.Authorization = `Bearer ${token}`;
             return API(originalRequest);
           })
-          .catch((err) => Promise.reject(err));
+          .catch((err) => Promise.reject(err)); 
+          
       }
 
       isRefreshing = true;

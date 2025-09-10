@@ -166,7 +166,7 @@ export default function Page() {
             </CardHeader>
 
             <CardDescription className="px-4 text-sm text-gray-500">
-              Suivi de la logistique vers l'afrique / depuis la Chine
+              Suivi de la logistique vers l&apos;afrique / depuis la Chine
             </CardDescription>
 
             <CardContent className="px-4 py-3 text-[#333] text-sm space-y-2">

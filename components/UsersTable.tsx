@@ -239,11 +239,11 @@ const UsersTable = ({
               <td className="p-3 flex items-center gap-3">
                 <Avatar className="h-10 w-10 rounded-full border-1 justify-center items-center">
                   <AvatarImage
-                    className="rounded-full"
+                    className="rounded-full overflow-hidden"
                     src={user.url_photo_profil || ""}
                     alt={user.nom}
                   />
-                  <AvatarFallback>
+                  <AvatarFallback className="flex justify-center items-center text-center  h-full rounded-circle">
                     {user.nom[0]}
                     {user.prenom[0]}
                   </AvatarFallback>
