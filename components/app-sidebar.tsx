@@ -1,7 +1,6 @@
 "use client";
 /* eslint-disable @typescript-eslint/no-explicit-any */
-
-import { Users, Package, LogOut, BarChart2 } from "lucide-react";
+import { Users, Package, LogOut, BarChart2, Globe } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -21,6 +20,11 @@ const items = [
     title: "Utilisateurs",
     url: "/dashboard",
     icon: Users,
+  },
+  {
+    title: "Pays",
+    url: "/pays",
+    icon: Globe,
   },
   {
     title: "Colis",

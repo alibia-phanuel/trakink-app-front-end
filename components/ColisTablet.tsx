@@ -2,8 +2,15 @@
 import { Checkbox } from "@/components/ui/checkbox";
 import { ColisPayload } from "@/type/colis";
 import { ColisEditDialog } from "@/components/ColisEditDialog";
-import { ColisStatutButton } from "@/components/ColisStatutButton";
 import { DeleteColisButton } from "./DeleteColisButton";
+import { Eye, Printer } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface Props {
   colis: ColisPayload[];
@@ -19,6 +26,17 @@ export default function ColisList({
   onDeleted,
 }: Props) {
   const isSelected = (id: string) => selectedIds.includes(id);
+
+  const handlePrint = (colisId: string) => {
+    console.log(colisId);
+    // Implement print functionality here
+    window.print();
+  };
+
+  const handleViewDetails = (colisId: string) => {
+    // Implement view details functionality here
+    console.log(`View details for colis: ${colisId}`);
+  };
 
   return (
     <table className="w-full table-auto border-collapse">
@@ -77,14 +95,39 @@ export default function ColisList({
             <td className="p-3 flex gap-2 flex-wrap">
               {c.id && <ColisEditDialog colisId={c.id} onUpdated={onDeleted} />}
               {c.id && (
-                <ColisStatutButton
-                  colisId={c.id}
-                  statut={c.statut as "RECU_DESTINATION" | "QUITTE_CHINE"}
-                  onUpdated={onDeleted}
-                />
+                <DeleteColisButton colisId={c.id} onDeleted={onDeleted} />
               )}
               {c.id && (
-                <DeleteColisButton colisId={c.id} onDeleted={onDeleted} />
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline" // Changé de "ghost" à "outline" pour correspondre à ColisEditDialog
+                        size="icon"
+                        onClick={() => handleViewDetails(c.id!)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Voir détails</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              {c.id && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline" // Changé de "ghost" à "outline" pour correspondre à ColisEditDialog
+                        size="icon"
+                        onClick={() => handlePrint(c.id!)}
+                      >
+                        <Printer className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Imprimer</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
             </td>
           </tr>
