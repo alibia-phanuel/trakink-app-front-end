@@ -1,5 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { ColisPayload, ColisResponse, ColisUpdateData, PaginationMeta } from "@/type/colis";
+import {
+  ColisPayload,
+  ColisResponse,
+  ColisUpdateData,
+  PaginationMeta,
+} from "@/type/colis";
 import API from "./api"; // ton instance Axios
 import type { AxiosResponse } from "axios";
 import { deleteCloudinaryImages } from "./cloudinary";
@@ -67,7 +72,6 @@ export const getColiById = async (id: string): Promise<ColisPayload> => {
     const { data } = await API.get<{ colis: ColisPayload; message?: string }>(
       `/colis/${id}`
     );
-
     return data.colis;
   } catch (error: any) {
     console.error("❌ Erreur lors de la récupération du colis:", error);
