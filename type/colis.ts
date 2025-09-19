@@ -19,6 +19,7 @@ export interface ColisPayload {
   nom_colis: string;
   nature_colis: string;
   mode_envoi: string;
+  createdAt?: string;
   unite_mesure: string;
   taille: number;
   images_colis: string[]; // URLs des images

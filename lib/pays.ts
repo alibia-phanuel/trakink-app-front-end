@@ -4,7 +4,6 @@ import {
   DeleteCountryResponse,
   GetCountriesResponse,
   GetCountryByIdResponse,
-  ToggleCountryStatusResponse,
   UpdateCountryDto,
   UpdateCountryResponse,
 } from "@/type/pays";
@@ -54,12 +53,71 @@ export const deleteCountry = async (
   return res.data;
 };
 
-// ✅ Fonction pour activer/désactiver un pays
-export const toggleCountryStatus = async (
-  id: string
-): Promise<ToggleCountryStatusResponse> => {
-  const res = await API.patch<ToggleCountryStatusResponse>(
-    `/pays/${id}/toggle-status`
-  );
-  return res.data;
-};
+// Type du pays renvoyé par l'API
+export interface Pays {
+  id: string;
+  nom: string;
+  code: string;
+  status: "ACTIF" | "INACTIF";
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  createdByUser: {
+    id: string;
+    nom: string;
+    prenom: string;
+    email: string;
+    role: string;
+  };
+}
+
+// Réponse du backend pour toggle-status
+interface ToggleStatusResponse {
+  message: string;
+  pays: Pays;
+}
+
+/**
+ * ✅ Active ou désactive un pays
+ * @param paysId ID du pays
+ * @returns Objet `pays` mis à jour
+ */
+export async function togglePaysStatus(
+  paysId: string
+): Promise<ToggleStatusResponse> {
+  try {
+    const { data } = await API.patch<ToggleStatusResponse>(
+      `/pays/${paysId}/toggle-status`
+    );
+    return data;
+  } catch (error: unknown) {
+    console.error("Erreur lors du toggle du pays:", error);
+    throw error;
+  }
+}
+
+// ✅ Fonction pour récupérer les statistiques des pays
+export interface PaysStats {
+  totalPays: number;
+  paysActifs: number;
+  paysInactifs: number;
+  tauxActivation: string;
+  paysAvecColis: { nom: string; code: string; colisCount: number }[];
+  paysAvecUtilisateurs: { nom: string; code: string; usersCount: number }[];
+}
+
+export async function getPaysStats(): Promise<PaysStats> {
+  try {
+    const response = await API.get("/pays/stats");
+    return response.data.stats as PaysStats;
+  } catch (error: any) {
+    if (error.response?.status === 403) {
+      throw new Error("Accès interdit - Employés non autorisés");
+    }
+    console.error("Erreur lors de la récupération des stats pays:", error);
+    throw new Error(
+      error.response?.data?.message ||
+        "Impossible de charger les statistiques des pays."
+    );
+  }
+}
