@@ -29,6 +29,10 @@ interface Props {
   onUpdated: () => void;
 }
 
+const Spinner = () => (
+  <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"></div>
+);
+
 export function ColisEditDialog({ colisId, onUpdated }: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -67,10 +71,31 @@ export function ColisEditDialog({ colisId, onUpdated }: Props) {
           setOldImageIds(data.imageId || []);
           setError(null);
         })
-        .catch(() => setError("Impossible de charger le colis."))
+        .catch((e: any) =>
+          setError(e.message || "Impossible de charger le colis.")
+        )
         .finally(() => setLoading(false));
     }
   }, [open, colisId]);
+
+  const handleOpenChange = (isOpen: boolean) => {
+    setOpen(isOpen);
+    if (!isOpen) {
+      setForm(null);
+      setOldImageIds([]);
+      setError(null);
+      setSuggestions({
+        ville_destination: [],
+        mode_envoi: [],
+        unite_mesure: [],
+      });
+      setIsSuggestionOpen({
+        ville_destination: false,
+        mode_envoi: false,
+        unite_mesure: false,
+      });
+    }
+  };
 
   const handleChange = (
     field: keyof ColisUpdateData,
@@ -86,8 +111,12 @@ export function ColisEditDialog({ colisId, onUpdated }: Props) {
     options: string[]
   ) => {
     handleChange(field, value);
+    let filteredOptions = options;
+    if (field === "ville_destination" && form?.pays_destination) {
+      filteredOptions = cityMap[form.pays_destination] || [];
+    }
     if (value.length >= 1) {
-      const filtered = options.filter((option) =>
+      const filtered = filteredOptions.filter((option) =>
         option.toLowerCase().includes(value.toLowerCase())
       );
       setSuggestions((prev) => ({ ...prev, [field]: filtered }));
@@ -98,40 +127,37 @@ export function ColisEditDialog({ colisId, onUpdated }: Props) {
     }
   };
 
-  const handleCityInput = (value: string) => {
-    handleChange("ville_destination", value);
-    if (value.length >= 1) {
-      const filteredCities = form?.pays_destination
-        ? cityMap[form.pays_destination]?.filter((city) =>
-            city.toLowerCase().includes(value.toLowerCase())
-          ) || []
-        : Object.values(cityMap)
-            .flat()
-            .filter((city) => city.toLowerCase().includes(value.toLowerCase()));
-      setSuggestions((prev) => ({
-        ...prev,
-        ville_destination: filteredCities,
-      }));
-      setIsSuggestionOpen((prev) => ({ ...prev, ville_destination: true }));
-    } else {
-      setSuggestions((prev) => ({ ...prev, ville_destination: [] }));
-      setIsSuggestionOpen((prev) => ({ ...prev, ville_destination: false }));
-    }
-  };
-
   const handleImageRemove = (index: number) => {
     if (!form) return;
     const newImages = [...(form.images_colis || [])];
+    const newImageIds = [...(form.imageId || [])];
     newImages.splice(index, 1);
-    setForm({ ...form, images_colis: newImages });
+    newImageIds.splice(index, 1);
+    setForm({ ...form, images_colis: newImages, imageId: newImageIds });
   };
 
   const handleImageAdd = async (e: ChangeEvent<HTMLInputElement>) => {
     if (!form || !e.target.files) return;
     const files = Array.from(e.target.files);
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    const validTypes = ["image/jpeg", "image/png", "image/gif"];
+
+    const validFiles = files.filter((file) => {
+      if (!validTypes.includes(file.type)) {
+        toast.error(`Le fichier ${file.name} n'est pas une image valide.`);
+        return false;
+      }
+      if (file.size > maxSize) {
+        toast.error(
+          `Le fichier ${file.name} dépasse la taille maximale de 5MB.`
+        );
+        return false;
+      }
+      return true;
+    });
 
     const newImages: string[] = await Promise.all(
-      files.map(
+      validFiles.map(
         (file) =>
           new Promise<string>((resolve) => {
             const reader = new FileReader();
@@ -150,22 +176,35 @@ export function ColisEditDialog({ colisId, onUpdated }: Props) {
 
   const handleSubmit = async () => {
     if (!form) return;
+    if (
+      !form.pays_destination ||
+      !form.ville_destination ||
+      !form.mode_envoi ||
+      !form.unite_mesure
+    ) {
+      setError("Veuillez remplir tous les champs obligatoires.");
+      return;
+    }
+    if (form.taille && Number(form.taille) <= 0) {
+      setError("La taille doit être positive.");
+      return;
+    }
     setLoading(true);
     try {
       await updateColisWithImages(colisId, form, oldImageIds);
-      toast.success("✅  colis mis à jour !");
+      toast.success("✅ Colis mis à jour !");
       onUpdated();
       setOpen(false);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      setError("Erreur lors de la mise à jour du colis.");
+      setError(e.message || "Erreur lors de la mise à jour du colis.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button variant="outline" size="icon">
           <Edit className="w-4 h-4" />
@@ -212,7 +251,13 @@ export function ColisEditDialog({ colisId, onUpdated }: Props) {
                 <Input
                   id="ville"
                   value={form.ville_destination || ""}
-                  onChange={(e) => handleCityInput(e.target.value)}
+                  onChange={(e) =>
+                    handleInputWithSuggestions(
+                      e.target.value,
+                      "ville_destination",
+                      Object.values(cityMap).flat()
+                    )
+                  }
                   onFocus={() => {
                     if (
                       form.ville_destination ||
@@ -378,6 +423,7 @@ export function ColisEditDialog({ colisId, onUpdated }: Props) {
                 value={form.taille || ""}
                 onChange={(e) => handleChange("taille", e.target.value)}
                 type="number"
+                min="0"
               />
             </div>
 
@@ -428,7 +474,14 @@ export function ColisEditDialog({ colisId, onUpdated }: Props) {
             Annuler
           </Button>
           <Button variant="default" onClick={handleSubmit} disabled={loading}>
-            {loading ? "Enregistrement…" : "Enregistrer"}
+            {loading ? (
+              <span className="flex items-center gap-2">
+                <Spinner />
+                Enregistrement…
+              </span>
+            ) : (
+              "Enregistrer"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

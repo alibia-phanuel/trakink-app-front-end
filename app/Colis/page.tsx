@@ -1,14 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { FaPlus, FaEye, FaPencilAlt, FaTrash, FaPrint } from "react-icons/fa";
+import { FaPlus, FaEye, FaTrash, FaPrint } from "react-icons/fa";
+import { ColisEditDialog } from "@/components/ColisEditDialog";
 import { cn } from "@/lib/utils";
-
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogTrigger,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import ContentWrapper from "@/components/ContentWrapperProps";
 import ProtectedRoute from "@/app/context/ProtectedRoute";
 import { getColis } from "@/lib/newColis";
+import { deleteColis } from "@/lib/Colis";
 import type { Colis, Pagination } from "@/type/newColis";
-
 import {
   Table,
   TableBody,
@@ -35,34 +44,46 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Label } from "@/components/ui/label";
+import ColisForm from "@/components/AddColisForm";
+import ColisDetailsModal from "@/components/actions/ColisDetailsModal";
+import { toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import { ToastContainer } from "react-toastify";
 
-// Options de statut pour le filtre
 const STATUT_OPTIONS = [
   "TOUS",
-  "EN_TRANSIT",
-  "QUITTE_CHINE",
-  "LIVRE",
   "COLLIS_AJOUTE",
-  "EN_ATTENTE",
+  "QUITTE_CHINE",
+  "RECU_DESTINATION",
+  "RECU_PAR_LE_CLIENT",
 ] as const;
 
-// Update getStatusColor to handle undefined
+const STATUT_LABELS: Record<string, string> = {
+  COLLIS_AJOUTE: "Colis ajouté",
+  QUITTE_CHINE: "Quitté la Chine",
+  RECU_DESTINATION: "Reçu à destination",
+  RECU_PAR_LE_CLIENT: "Reçu par le client",
+};
+
 const getStatusColor = (statut?: string) => {
   switch (statut) {
-    case "EN_TRANSIT":
-      return "bg-blue-100 text-blue-800";
-    case "QUITTE_CHINE":
-      return "bg-yellow-100 text-yellow-800";
-    case "LIVRE":
-      return "bg-green-100 text-green-800";
     case "COLLIS_AJOUTE":
       return "bg-purple-100 text-purple-800";
-    case "EN_ATTENTE":
-      return "bg-gray-100 text-gray-800";
+    case "QUITTE_CHINE":
+      return "bg-yellow-100 text-yellow-800";
+    case "RECU_DESTINATION":
+      return "bg-blue-100 text-blue-800";
+    case "RECU_PAR_LE_CLIENT":
+      return "bg-green-100 text-green-800";
     default:
-      return "bg-gray-100 text-gray-800"; // Default for undefined or unknown status
+      return "bg-gray-100 text-gray-800";
   }
 };
+
+// Composant Spinner simple avec Tailwind
+const Spinner = () => (
+  <div className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"></div>
+);
 
 export default function ColisPage() {
   const [colisList, setColisList] = useState<Colis[]>([]);
@@ -75,6 +96,11 @@ export default function ColisPage() {
     useState<(typeof STATUT_OPTIONS)[number]>("TOUS");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [selectedColisId, setSelectedColisId] = useState<string | null>(null);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [colisToDeleteId, setColisToDeleteId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchColis = async () => {
     try {
@@ -86,7 +112,6 @@ export default function ColisPage() {
         statut: statutFilter !== "TOUS" ? statutFilter : undefined,
       });
 
-      // Filtrage par date côté frontend
       const filteredColis = data.colis.filter((c) => {
         const created = new Date(c.createdAt);
         if (startDate && created < new Date(startDate)) return false;
@@ -98,6 +123,7 @@ export default function ColisPage() {
       setPagination(data.pagination);
     } catch (err) {
       console.error("Erreur lors de la récupération des colis:", err);
+      toast.error("Erreur lors de la récupération des colis");
     } finally {
       setLoading(false);
     }
@@ -107,23 +133,58 @@ export default function ColisPage() {
     fetchColis();
   }, [page, search, statutFilter, startDate, endDate]);
 
+  const selectedColis = colisList.find((colis) => colis.id === selectedColisId);
+
+  const handleDeleteColis = async () => {
+    if (!colisToDeleteId) return;
+    setIsDeleting(true);
+    try {
+      const response = await deleteColis(colisToDeleteId);
+      setIsDeleteModalOpen(false);
+      setColisToDeleteId(null);
+      await fetchColis(); // Rafraîchir la liste après suppression
+      toast.success(response.message); // Afficher le message de l'API
+    } catch (error: any) {
+      console.error("Erreur lors de la suppression du colis:", error);
+      toast.error(error.message || "Échec de la suppression du colis");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <ProtectedRoute>
       <ContentWrapper className="bg-gradient-to-br from-gray-50 to-gray-100 p-4 sm:p-6 md:p-8 min-h-[calc(100vh-109px)]">
+        <ToastContainer
+          position="top-right"
+          autoClose={3000}
+          hideProgressBar={false}
+          closeOnClick
+        />
         <Card className="shadow-lg border-none">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-2xl font-bold text-gray-800">
               📦 Gestion des Colis
             </CardTitle>
-            <Button
-              className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white transition-all duration-200"
-              onClick={() => alert("Ajouter un colis")} // Remplacez par votre logique
-            >
-              <FaPlus className="mr-2 h-4 w-4" /> Ajouter Colis
-            </Button>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white transition-all duration-200">
+                  <FaPlus className="mr-2 h-4 w-4" /> Ajouter Colis
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="w-[80%] max-w-5xl h-[90%]">
+                <DialogHeader>
+                  <DialogTitle>Ajouter un nouveau colis</DialogTitle>
+                  <DialogDescription>
+                    Remplissez les informations ci-dessous pour enregistrer un
+                    colis.
+                  </DialogDescription>
+                </DialogHeader>
+                <ColisForm />
+              </DialogContent>
+            </Dialog>
           </CardHeader>
           <CardContent>
-            {/* Filtres */}
             <div className="flex flex-col sm:flex-row sm:items-end gap-4 mb-6">
               <div className="flex flex-col gap-2 w-full sm:w-80">
                 <Label htmlFor="search">Rechercher un destinataire</Label>
@@ -150,7 +211,7 @@ export default function ColisPage() {
                   <SelectContent>
                     {STATUT_OPTIONS.map((s) => (
                       <SelectItem key={s} value={s}>
-                        {s === "TOUS" ? "Tous statuts" : s.replaceAll("_", " ")}
+                        {s === "TOUS" ? "Tous statuts" : STATUT_LABELS[s] ?? s}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -182,7 +243,6 @@ export default function ColisPage() {
               </div>
             </div>
 
-            {/* Table */}
             <div className="rounded-lg border bg-white shadow-sm overflow-hidden">
               <Table>
                 <TableHeader>
@@ -240,14 +300,21 @@ export default function ColisPage() {
                                 getStatusColor(colis.statut)
                               )}
                             >
-                              {colis.statut?.replaceAll("_", " ") ?? "Inconnu"}
+                              {STATUT_LABELS[colis.statut ?? ""] ?? "Inconnu"}
                             </span>
                           </TableCell>
                           <TableCell className="text-right flex gap-2 justify-end">
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button variant="outline" size="icon">
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() => {
+                                      setSelectedColisId(colis.id);
+                                      setIsDetailsModalOpen(true);
+                                    }}
+                                  >
                                     <FaEye className="h-4 w-4" />
                                   </Button>
                                 </TooltipTrigger>
@@ -255,9 +322,10 @@ export default function ColisPage() {
                               </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button variant="outline" size="icon">
-                                    <FaPencilAlt className="h-4 w-4" />
-                                  </Button>
+                                  <ColisEditDialog
+                                    colisId={colis.id}
+                                    onUpdated={fetchColis}
+                                  />
                                 </TooltipTrigger>
                                 <TooltipContent>Modifier</TooltipContent>
                               </Tooltip>
@@ -271,7 +339,14 @@ export default function ColisPage() {
                               </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button variant="destructive" size="icon">
+                                  <Button
+                                    variant="destructive"
+                                    size="icon"
+                                    onClick={() => {
+                                      setColisToDeleteId(colis.id);
+                                      setIsDeleteModalOpen(true);
+                                    }}
+                                  >
                                     <FaTrash className="h-4 w-4" />
                                   </Button>
                                 </TooltipTrigger>
@@ -285,7 +360,55 @@ export default function ColisPage() {
               </Table>
             </div>
 
-            {/* Pagination */}
+            {/* Modal de confirmation de suppression */}
+            <Dialog
+              open={isDeleteModalOpen}
+              onOpenChange={setIsDeleteModalOpen}
+            >
+              <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                  <DialogTitle>Confirmer la suppression</DialogTitle>
+                  <DialogDescription>
+                    Êtes-vous sûr de vouloir supprimer ce colis ? Cette action
+                    est irréversible.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter className="gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsDeleteModalOpen(false);
+                      setColisToDeleteId(null);
+                    }}
+                    disabled={isDeleting}
+                  >
+                    Annuler
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    onClick={handleDeleteColis}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting ? (
+                      <span className="flex items-center gap-2">
+                        <Spinner />
+                        Suppression...
+                      </span>
+                    ) : (
+                      "Oui, supprimer"
+                    )}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <ColisDetailsModal
+              selectedColis={selectedColis}
+              isOpen={isDetailsModalOpen}
+              onOpenChange={setIsDetailsModalOpen}
+              getStatusColor={getStatusColor}
+            />
+
             <div className="flex items-center justify-end gap-4 mt-4">
               <Button
                 variant="outline"

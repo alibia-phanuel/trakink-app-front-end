@@ -31,6 +31,7 @@
     "firebase": "^11.9.1",
     "lucide-react": "^0.516.0",
     "next": "^15.5.3",
+    "qrcode.react": "^4.2.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-flagkit": "^2.0.4",

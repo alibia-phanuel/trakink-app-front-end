@@ -8,8 +8,8 @@ export interface PaginationMeta {
 }
 
 export interface ColisPayload {
-  id?: string; // ⬅ rendu optionnel
-  statut?: string; // ⬅ rendu optionnel
+  id?: string;
+  statut?: string;
   nom_destinataire: string;
   numero_tel_destinataire: string;
   email_destinataire: string;
@@ -22,8 +22,9 @@ export interface ColisPayload {
   createdAt?: string;
   unite_mesure: string;
   taille: number;
-  images_colis: string[]; // URLs des images
-  imageId?: string[]; // si tu veux garder les IDs d'images
+  images_colis: string[];
+  imageId?: string[];
+  dureeTransportEstimee?: number; // <-- optionnel mais validé par le formula
 }
 
 export interface ColisResponse {

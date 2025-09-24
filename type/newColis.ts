@@ -1,10 +1,9 @@
 // types/colis.ts
-export type StatutColis =
-  | "EN_TRANSIT"
-  | "QUITTE_CHINE"
-  | "LIVRE"
+export type ColisStatut =
   | "COLLIS_AJOUTE"
-  | "EN_ATTENTE";
+  | "QUITTE_CHINE"
+  | "RECU_DESTINATION"
+  | "RECU_PAR_LE_CLIENT";
 
 export interface UserInfo {
   id: string;
@@ -27,7 +26,7 @@ export interface ColisInput {
   taille: number;
   images_colis: string[];
   imageId?: string[];
-  statut?: StatutColis;
+ statut?: ColisStatut;
   dureeTransportEstimee?: number | null;
   qrCodeData?: string | null;
   ajouteParId?: string;
@@ -61,12 +60,7 @@ export interface Pagination {
 export interface GetColisParams {
   page?: number;
   limit?: number;
-  statut?:
-    | "EN_TRANSIT"
-    | "QUITTE_CHINE"
-    | "LIVRE"
-    | "COLLIS_AJOUTE"
-    | "EN_ATTENTE";
+  statut?: ColisStatut;
   pays_destination?: string;
   search?: string;
   sortBy?:
