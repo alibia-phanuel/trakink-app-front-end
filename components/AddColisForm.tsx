@@ -42,15 +42,18 @@ const colisSchema = z
     email_destinataire: z.string().email("Adresse email invalide"),
     pays_destination: z.string().min(2, "Pays requis"),
     ville_destination: z.string().min(2, "Ville requise"),
-    adresse_destinataire: z.string().min(5, "Adresse requise"),
+    // adresse_destinataire: z.string().min(5, "Adresse requise"),
     nom_colis: z.string().min(2, "Nom du colis requis"),
     nature_colis: z.string().min(2, "Nature du colis requise"),
-    mode_envoi: z.enum(["Maritime", "aerien", "standard"], {
+    mode_envoi: z.enum(["Maritime", "Aérien"], {
       message: "Mode d’envoi requis",
     }),
-    unite_mesure: z.enum(["m³", "cm³", "kg", "g"], {
-      message: "Unité requise",
-    }),
+    unite_mesure: z.enum(
+      ["m³", "ft³", "20ft", "40ft", "40ftHC", "45ftHC", "lb", "kg", "g"],
+      {
+        message: "Unité requise",
+      }
+    ),
     taille: z
       .number({ invalid_type_error: "La taille doit être un nombre" })
       .positive("La taille doit être positive"),
@@ -66,14 +69,16 @@ const colisSchema = z
   .refine(
     (data) => {
       if (data.mode_envoi === "Maritime")
-        return ["m³", "cm³", "kg"].includes(data.unite_mesure);
-      if (data.mode_envoi === "aerien")
+        return ["m³", "ft³", "20ft", "40ft", "40ftHC", "45ftHC"].includes(
+          data.unite_mesure
+        );
+      if (data.mode_envoi === "Aérien")
         return ["kg", "g"].includes(data.unite_mesure);
       return true; // standard peut accepter n'importe quoi
     },
     {
       message:
-        "L’unité doit correspondre au mode d’envoi : volume (m³, cm³) pour maritime, poids (kg, g) pour aerien",
+        "L’unité doit correspondre au mode d’envoi : volume (m³, ft³, conteneur 20ft/40ft/40ftHC/45ftHC) pour maritime, poids (kg, g, tonne) pour aérien",
       path: ["unite_mesure"],
     }
   );
@@ -134,8 +139,8 @@ function ColisForm() {
   } = useForm<ColisFormValues>({
     resolver: zodResolver(colisSchema),
     defaultValues: {
-      mode_envoi: "standard",
-      unite_mesure: "cm³",
+      mode_envoi: "Aérien",
+      unite_mesure: "m³",
       code_pays: "+233", // Default to Ghana
       pays_destination: "Ghana",
     },
@@ -400,21 +405,18 @@ function ColisForm() {
   };
 
   const unitOptions: Record<
-    "Maritime" | "aerien" | "standard",
+    "Maritime" | "Aérien",
     { value: string; label: string }[]
   > = {
     Maritime: [
-      { value: "m³", label: "Mètres cubes (m³)" },
-      { value: "cm³", label: "Centimètres cubes (cm³)" },
-      { value: "kg", label: "Kilogrammes (kg)" },
+      { value: "m³", label: "Mètre cube (m³)" },
+      { value: "ft³", label: "Pied cube (ft³)" },
+      { value: "20ft", label: "Conteneur 20 pieds (20ft)" },
+      { value: "40ft", label: "Conteneur 40 pieds (40ft)" },
+      { value: "40ftHC", label: "Conteneur 40 pieds High Cube (40ft HC)" },
+      { value: "45ftHC", label: "Conteneur 45 pieds High Cube (45ft HC)" },
     ],
-    aerien: [
-      { value: "kg", label: "Kilogrammes (kg)" },
-      { value: "g", label: "Grammes (g)" },
-    ],
-    standard: [
-      { value: "m³", label: "Mètres cubes (m³)" },
-      { value: "cm³", label: "Centimètres cubes (cm³)" },
+    Aérien: [
       { value: "kg", label: "Kilogrammes (kg)" },
       { value: "g", label: "Grammes (g)" },
     ],
@@ -575,14 +577,14 @@ function ColisForm() {
               </p>
             )}
           </div>
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 hidden">
             <Label
               htmlFor="adresse_destinataire"
               className="text-sm font-medium"
             >
               Adresse *
             </Label>
-            <Input
+            {/* <Input
               {...register("adresse_destinataire")}
               id="adresse_destinataire"
               placeholder="123 Rue Exemple, 75001"
@@ -593,7 +595,7 @@ function ColisForm() {
               <p className="text-red-500 text-sm mt-1">
                 {errors.adresse_destinataire.message}
               </p>
-            )}
+            )} */}
           </div>
         </CardContent>
       </Card>
@@ -648,13 +650,12 @@ function ColisForm() {
               onValueChange={(value: ModeEnvoi) => {
                 setValue("mode_envoi", value);
 
-                // On ajuste automatiquement l'unité selon le mode d'envoi
                 setValue(
                   "unite_mesure",
-                  value === "Maritime" ? "m³" : value === "aerien" ? "kg" : "m³" // standard par défaut
+                  value === "Maritime" ? "m³" : value === "Aérien" ? "kg" : "m³"
                 );
               }}
-              defaultValue="standard"
+              defaultValue="Aérien"
             >
               <SelectTrigger
                 className="mt-1"
@@ -663,9 +664,8 @@ function ColisForm() {
                 <SelectValue placeholder="Sélectionner un mode" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="standard">Standard</SelectItem>
                 <SelectItem value="Maritime">Maritime</SelectItem>
-                <SelectItem value="aerien">Aérien</SelectItem>
+                <SelectItem value="Aérien">Aérien</SelectItem>
               </SelectContent>
             </Select>
             {errors.mode_envoi && (
