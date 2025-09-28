@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, X, Camera, RefreshCw } from "lucide-react";
+import { Upload, X, RefreshCw } from "lucide-react";
 import Flag from "react-flagkit";
 import {
   DialogContent,
@@ -29,63 +29,32 @@ import {
 } from "@/components/ui/dialog";
 import { ColisPayload } from "@/type/colis";
 import { uploadImagesToCloudinary } from "@/lib/cloudinary";
+import { Switch } from "@/components/ui/switch"; // Ajout pour le toggle Express
 
-const colisSchema = z
-  .object({
-    nom_destinataire: z
-      .string()
-      .min(2, "Le nom doit contenir au moins 2 caractères"),
-    numero_tel_destinataire: z
-      .string()
-      .regex(/^\d{8,}$/, "Numéro de téléphone invalide (au moins 8 chiffres)"),
-    code_pays: z.string().min(1, "Code pays requis"),
-    email_destinataire: z.string().email("Adresse email invalide"),
-    pays_destination: z.string().min(2, "Pays requis"),
-    ville_destination: z.string().min(2, "Ville requise"),
-    // adresse_destinataire: z.string().min(5, "Adresse requise"),
-    nom_colis: z.string().min(2, "Nom du colis requis"),
-    nature_colis: z.string().min(2, "Nature du colis requise"),
-    mode_envoi: z.enum(["Maritime", "Aérien"], {
-      message: "Mode d’envoi requis",
-    }),
-    unite_mesure: z.enum(
-      ["m³", "ft³", "20ft", "40ft", "40ftHC", "45ftHC", "lb", "kg", "g"],
-      {
-        message: "Unité requise",
-      }
-    ),
-    taille: z
-      .number({ invalid_type_error: "La taille doit être un nombre" })
-      .positive("La taille doit être positive"),
-    dureeTransportEstimee: z
-      .number({ invalid_type_error: "Durée requise" })
-      .int("La durée doit être un entier")
-      .min(1, "La durée doit être au minimum de 1 jour")
-      .max(365, "La durée ne peut pas dépasser 365 jours")
-      .optional(),
-    images_colis: z.array(z.string()).optional(),
-    imageId: z.array(z.string()).optional(),
-  })
-  .refine(
-    (data) => {
-      if (data.mode_envoi === "Maritime")
-        return ["m³", "ft³", "20ft", "40ft", "40ftHC", "45ftHC"].includes(
-          data.unite_mesure
-        );
-      if (data.mode_envoi === "Aérien")
-        return ["kg", "g"].includes(data.unite_mesure);
-      return true; // standard peut accepter n'importe quoi
-    },
-    {
-      message:
-        "L’unité doit correspondre au mode d’envoi : volume (m³, ft³, conteneur 20ft/40ft/40ftHC/45ftHC) pour maritime, poids (kg, g, tonne) pour aérien",
-      path: ["unite_mesure"],
-    }
-  );
+const colisSchema = z.object({
+  nom_destinataire: z
+    .string()
+    .min(2, "Le nom doit contenir au moins 2 caractères"),
+  numero_tel_destinataire: z
+    .string()
+    .regex(/^\d{8,}$/, "Numéro de téléphone invalide (au moins 8 chiffres)"),
+  code_pays: z.string().min(1, "Code pays requis"),
+  email_destinataire: z.string().email("Adresse email invalide"),
+  pays_destination: z.string().min(2, "Pays requis"),
+  ville_destination: z.string().min(2, "Ville requise"),
+  nature_colis: z.string().min(2, "Nature du colis requise"),
+  mode_envoi: z.enum(["Maritime", "Aérien"], {
+    message: "Mode d’envoi requis",
+  }),
+  taille: z
+    .number({ invalid_type_error: "La taille doit être un nombre" })
+    .positive("La taille doit être positive"),
+  images_colis: z.array(z.string()).optional(),
+  imageId: z.array(z.string()).optional(),
+});
 
 type ColisFormValues = z.infer<typeof colisSchema>;
 type ModeEnvoi = ColisFormValues["mode_envoi"];
-type UniteMesure = ColisFormValues["unite_mesure"];
 type Country = {
   id: string;
   nom: string;
@@ -140,7 +109,6 @@ function ColisForm() {
     resolver: zodResolver(colisSchema),
     defaultValues: {
       mode_envoi: "Aérien",
-      unite_mesure: "m³",
       code_pays: "+233", // Default to Ghana
       pays_destination: "Ghana",
     },
@@ -149,10 +117,10 @@ function ColisForm() {
   const [images, setImages] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
   const [countries, setCountries] = useState<Country[]>([]);
   const [isLoadingCountries, setIsLoadingCountries] = useState(true);
   const [countryError, setCountryError] = useState<string | null>(null);
+  const [isExpress, setIsExpress] = useState(false); // Nouveau état pour Aérien express
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -160,6 +128,9 @@ function ColisForm() {
 
   const modeEnvoi = watch("mode_envoi");
   const paysDestination = watch("pays_destination");
+
+  // Unité dynamique pour affichage
+  const uniteMesure = modeEnvoi === "Aérien" ? "kg" : "m³";
 
   // Sample phone code mapping (extend with all countries from your API)
   const phoneCodeMapping: { [key: string]: string } = {
@@ -299,32 +270,6 @@ function ColisForm() {
     setPreviewUrls((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const openCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-      }
-      setIsCameraOpen(true);
-      setCameraError(null);
-    } catch (err: unknown) {
-      setCameraError(
-        "Impossible d’accéder à la caméra. Vérifiez les autorisations."
-      );
-      toast.error("Erreur d’accès à la caméra");
-
-      if (err instanceof Error) {
-        console.error("Erreur caméra:", err.message);
-      } else {
-        console.error("Erreur inconnue:", err);
-      }
-    }
-  };
-
   const closeCamera = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
@@ -366,6 +311,11 @@ function ColisForm() {
         (img): img is { url: string; imageId: string } => img !== null
       );
 
+      // Définition automatique des valeurs
+      const nomColisDefault = "Colis standard";
+      const uniteMesureAuto = modeEnvoi === "Aérien" ? "kg" : "m³";
+      const dureeAuto = modeEnvoi === "Maritime" ? 60 : isExpress ? 5 : 14;
+
       const payload: ColisPayload = {
         nom_destinataire: data.nom_destinataire,
         numero_tel_destinataire: `${data.code_pays.replace("+", "")}${
@@ -376,14 +326,14 @@ function ColisForm() {
         ville_destination: data.ville_destination,
         adresse_destinataire:
           data.ville_destination + " " + "de la pars de chris CCI",
-        nom_colis: data.nom_colis,
+        nom_colis: nomColisDefault, // Valeur par défaut
         nature_colis: data.nature_colis,
         mode_envoi: data.mode_envoi,
-        unite_mesure: data.unite_mesure,
+        unite_mesure: uniteMesureAuto, // Automatique
         taille: data.taille,
         images_colis: successImages.map((img) => img.url), // ✅ URLs Cloudinary
         imageId: successImages.map((img) => img.imageId), // ✅ IDs Cloudinary
-        dureeTransportEstimee: data.dureeTransportEstimee ?? undefined,
+        dureeTransportEstimee: dureeAuto, // Automatique
       };
 
       console.log("les données du colis", payload);
@@ -404,23 +354,6 @@ function ColisForm() {
     }
   };
 
-  const unitOptions: Record<
-    "Maritime" | "Aérien",
-    { value: string; label: string }[]
-  > = {
-    Maritime: [
-      { value: "m³", label: "Mètre cube (m³)" },
-      { value: "ft³", label: "Pied cube (ft³)" },
-      { value: "20ft", label: "Conteneur 20 pieds (20ft)" },
-      { value: "40ft", label: "Conteneur 40 pieds (40ft)" },
-      { value: "40ftHC", label: "Conteneur 40 pieds High Cube (40ft HC)" },
-      { value: "45ftHC", label: "Conteneur 45 pieds High Cube (45ft HC)" },
-    ],
-    Aérien: [
-      { value: "kg", label: "Kilogrammes (kg)" },
-      { value: "g", label: "Grammes (g)" },
-    ],
-  };
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
       {/* Informations destinataire */}
@@ -609,23 +542,6 @@ function ColisForm() {
         </CardHeader>
         <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="nom_colis" className="text-sm font-medium">
-              Nom du colis *
-            </Label>
-            <Input
-              {...register("nom_colis")}
-              id="nom_colis"
-              placeholder="Colis important"
-              className="mt-1"
-              aria-invalid={!!errors.nom_colis}
-            />
-            {errors.nom_colis && (
-              <p className="text-red-500 text-sm mt-1">
-                {errors.nom_colis.message}
-              </p>
-            )}
-          </div>
-          <div>
             <Label htmlFor="nature_colis" className="text-sm font-medium">
               Nature du colis *
             </Label>
@@ -649,11 +565,7 @@ function ColisForm() {
             <Select
               onValueChange={(value: ModeEnvoi) => {
                 setValue("mode_envoi", value);
-
-                setValue(
-                  "unite_mesure",
-                  value === "Maritime" ? "m³" : value === "Aérien" ? "kg" : "m³"
-                );
+                setIsExpress(false); // Réinitialiser express si mode change
               }}
               defaultValue="Aérien"
             >
@@ -674,39 +586,22 @@ function ColisForm() {
               </p>
             )}
           </div>
-          <div>
-            <Label htmlFor="unite_mesure" className="text-sm font-medium">
-              Unité de mesure *
-            </Label>
-            <Select
-              onValueChange={(value) =>
-                setValue("unite_mesure", value as UniteMesure)
-              }
-              defaultValue="cm³"
-            >
-              <SelectTrigger
+          {modeEnvoi === "Aérien" && (
+            <div>
+              <Label htmlFor="express" className="text-sm font-medium">
+                Mode express (5 jours au lieu de 14)
+              </Label>
+              <Switch
+                id="express"
+                checked={isExpress}
+                onCheckedChange={setIsExpress}
                 className="mt-1"
-                aria-invalid={!!errors.unite_mesure}
-              >
-                <SelectValue placeholder="Sélectionner une unité" />
-              </SelectTrigger>
-              <SelectContent>
-                {unitOptions[modeEnvoi].map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.unite_mesure && (
-              <p className="text-red-500 text-sm mt-1">
-                {errors.unite_mesure.message}
-              </p>
-            )}
-          </div>
+              />
+            </div>
+          )}
           <div>
             <Label htmlFor="taille" className="text-sm font-medium">
-              Taille *
+              Taille ({uniteMesure}) *
             </Label>
             <Input
               {...register("taille", { valueAsNumber: true })}
@@ -723,29 +618,6 @@ function ColisForm() {
               </p>
             )}
           </div>
-          <div>
-            <Label
-              htmlFor="dureeTransportEstimee"
-              className="text-sm font-medium"
-            >
-              Durée estimée (jours)
-            </Label>
-            <Input
-              {...register("dureeTransportEstimee", { valueAsNumber: true })}
-              id="dureeTransportEstimee"
-              type="number"
-              placeholder="7"
-              min={1}
-              max={365}
-              className="mt-1"
-              aria-invalid={!!errors.dureeTransportEstimee}
-            />
-            {errors.dureeTransportEstimee && (
-              <p className="text-red-500 text-sm mt-1">
-                {errors.dureeTransportEstimee.message}
-              </p>
-            )}
-          </div>
           <div className="md:col-span-2">
             <Label htmlFor="images_colis" className="text-sm font-medium">
               Images du colis (max 5)
@@ -759,16 +631,6 @@ function ColisForm() {
               >
                 <Upload className="h-5 w-5" />
                 Ajouter des images
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={openCamera}
-                className="flex items-center gap-2"
-                disabled={isCameraOpen}
-              >
-                <Camera className="h-5 w-5" />
-                Prendre une photo
               </Button>
             </div>
             <div
@@ -790,9 +652,7 @@ function ColisForm() {
                 ref={fileInputRef}
               />
             </div>
-            {cameraError && (
-              <p className="text-red-500 text-sm mt-1">{cameraError}</p>
-            )}
+
             {isCameraOpen && (
               <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                 <div className="bg-white p-4 rounded-lg max-w-lg w-full">

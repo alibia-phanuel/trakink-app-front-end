@@ -39,17 +39,22 @@ export const getColis = async (
     const response = await API.get<GetColisResponse>("/colis", { params });
     return response.data;
   } catch (error: unknown) {
-    if (axios.isAxiosError?.(error)) {
+    if (axios.isAxiosError(error)) {
+      if (error.code === "ECONNABORTED") {
+        console.warn("Requête annulée, ignorée");
+        throw new Error("Requête annulée"); // Ou retourner une valeur par défaut si souhaité
+      }
       console.error(
         "Erreur Axios lors de la récupération des colis:",
         error.response?.data || error.message
       );
+      throw new Error(error.response?.data?.message || error.message);
     } else {
       console.error(
         "Erreur inconnue lors de la récupération des colis:",
         error
       );
+      throw new Error("Erreur inconnue lors de la récupération des colis");
     }
-    throw error;
   }
 };

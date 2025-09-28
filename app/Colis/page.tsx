@@ -49,6 +49,48 @@ import ColisDetailsModal from "@/components/actions/ColisDetailsModal";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { ToastContainer } from "react-toastify";
+import { useDebounce } from "use-debounce";
+import { QRCodeCanvas } from "qrcode.react";
+
+// Inline CSS styles for printing
+const modalStyles = `
+  .modal-content, .modal-content * {
+    color: #000000 !important;
+    background-color: #ffffff !important;
+    border-color: #000000 !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+    transform: none !important;
+    opacity: 1 !important;
+    -webkit-font-smoothing: antialiased !important;
+    text-rendering: optimizeLegibility !important;
+  }
+  .modal-content .text-gray-500 { color: #6b7280 !important; }
+  .modal-content .text-gray-600 { color: #4b5563 !important; }
+  .modal-content .text-gray-700 { color: #374151 !important; }
+  .modal-content .text-gray-800 { color: #1f2937 !important; }
+  .modal-content .text-gray-900 { color: #111827 !important; }
+  .modal-content .text-orange-500 { color: #f97316 !important; }
+  .modal-content .bg-gray-50 { background-color: #f9fafb !important; }
+  .modal-content .bg-purple-100 { background-color: #f3e8ff !important; }
+  .modal-content .text-purple-800 { color: #6b21a8 !important; }
+  .modal-content .bg-yellow-100 { background-color: #fefcbf !important; }
+  .modal-content .text-yellow-800 { color: #a16207 !important; }
+  .modal-content .bg-blue-100 { background-color: #dbeafe !important; }
+  .modal-content .text-blue-800 { color: #1e40af !important; }
+  .modal-content .bg-green-100 { background-color: #dcfce7 !important; }
+  .modal-content .text-green-800 { color: #166534 !important; }
+  .modal-content .shadow-sm { box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important; }
+  .modal-content .shadow-xl { box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1) !important; }
+  .modal-content .border-b { border-bottom: 1px solid #e5e7eb !important; }
+  .modal-content .border-t { border-top: 1px solid #e5e7eb !important; }
+  .modal-content .rounded { border-radius: 0.25rem !important; }
+  .modal-content .rounded-lg { border-radius: 0.5rem !important; }
+  .modal-content .rounded-full { border-radius: 9999px !important; }
+  @media print {
+    .print-container { box-shadow: none !important; margin: 0 !important; }
+    body { margin: 10mm !important; }
+  }
+`;
 
 const STATUT_OPTIONS = [
   "TOUS",
@@ -92,6 +134,7 @@ export default function ColisPage() {
   const [limit] = useState(10);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [phoneFilter, setPhoneFilter] = useState("");
   const [statutFilter, setStatutFilter] =
     useState<(typeof STATUT_OPTIONS)[number]>("TOUS");
   const [startDate, setStartDate] = useState("");
@@ -102,26 +145,40 @@ export default function ColisPage() {
   const [colisToDeleteId, setColisToDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Débouncing des inputs de recherche
+  const [debouncedSearch] = useDebounce(search, 500);
+  const [debouncedPhoneFilter] = useDebounce(phoneFilter, 500);
+
   const fetchColis = async () => {
     try {
       setLoading(true);
       const data = await getColis({
         page,
         limit,
-        search,
+        search: debouncedSearch,
         statut: statutFilter !== "TOUS" ? statutFilter : undefined,
       });
 
       const filteredColis = data.colis.filter((c) => {
         const created = new Date(c.createdAt);
-        if (startDate && created < new Date(startDate)) return false;
-        if (endDate && created > new Date(endDate)) return false;
-        return true;
+        const matchesDate =
+          (!startDate || created >= new Date(startDate)) &&
+          (!endDate || created <= new Date(endDate));
+        const matchesPhone =
+          !debouncedPhoneFilter ||
+          c.numero_tel_destinataire
+            .toLowerCase()
+            .includes(debouncedPhoneFilter.toLowerCase());
+        return matchesDate && matchesPhone;
       });
 
       setColisList(filteredColis);
       setPagination(data.pagination);
-    } catch (err) {
+    } catch (err: any) {
+      if (err.name === "AxiosError" && err.code === "ECONNABORTED") {
+        console.warn("Requête annulée, ignorée");
+        return;
+      }
       console.error("Erreur lors de la récupération des colis:", err);
       toast.error("Erreur lors de la récupération des colis");
     } finally {
@@ -131,7 +188,14 @@ export default function ColisPage() {
 
   useEffect(() => {
     fetchColis();
-  }, [page, search, statutFilter, startDate, endDate]);
+  }, [
+    page,
+    debouncedSearch,
+    debouncedPhoneFilter,
+    statutFilter,
+    startDate,
+    endDate,
+  ]);
 
   const selectedColis = colisList.find((colis) => colis.id === selectedColisId);
 
@@ -142,13 +206,211 @@ export default function ColisPage() {
       const response = await deleteColis(colisToDeleteId);
       setIsDeleteModalOpen(false);
       setColisToDeleteId(null);
-      await fetchColis(); // Rafraîchir la liste après suppression
-      toast.success(response.message); // Afficher le message de l'API
+      await fetchColis();
+      toast.success(response.message);
     } catch (error: any) {
       console.error("Erreur lors de la suppression du colis:", error);
       toast.error(error.message || "Échec de la suppression du colis");
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  // Fonction pour générer une image base64 du QR code
+  const generateQRCodeImage = (data: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      // Créer un conteneur temporaire pour le QR code
+      const container = document.createElement("div");
+      container.style.position = "absolute";
+      container.style.left = "-9999px"; // Hors écran
+      document.body.appendChild(container);
+
+      // Importer createRoot depuis react-dom/client
+      import("react-dom/client")
+        .then(({ createRoot }) => {
+          const root = createRoot(container);
+          root.render(
+            <QRCodeCanvas
+              value={data}
+              size={150}
+              bgColor="#f9fafb"
+              fgColor="#1f2937"
+              level="H"
+              includeMargin={true}
+            />
+          );
+
+          // Attendre que le canvas soit rendu
+          setTimeout(() => {
+            const canvas = container.querySelector("canvas");
+            if (canvas) {
+              const image = canvas.toDataURL("image/png");
+              root.unmount();
+              document.body.removeChild(container);
+              resolve(image);
+            } else {
+              root.unmount();
+              document.body.removeChild(container);
+              reject(new Error("Échec de la génération du QR code"));
+            }
+          }, 100); // Délai pour assurer le rendu
+        })
+        .catch((error) => {
+          document.body.removeChild(container);
+          reject(error);
+        });
+    });
+  };
+
+  // Fonction pour gérer l'impression
+  const handlePrintColis = async (colis: Colis) => {
+    const loadingToast = toast.loading("Préparation de l'impression...");
+    console.log("Colis à imprimer:", colis); // Log pour débogage
+
+    try {
+      // Validation des données
+      if (
+        !colis.id ||
+        !colis.nom_destinataire ||
+        !colis.numero_tel_destinataire ||
+        !colis.ville_destination ||
+        !colis.statut ||
+        !colis.createdAt
+      ) {
+        throw new Error("Données du colis incomplètes");
+      }
+
+      // Générer le QR code comme image base64
+      const qrCodeData = JSON.stringify({
+        id: colis.id,
+        nom_destinataire: colis.nom_destinataire,
+        numero_tel_destinataire: colis.numero_tel_destinataire,
+        ville_destination: colis.ville_destination,
+        statut: colis.statut,
+      });
+
+      const qrCodeImage = await generateQRCodeImage(qrCodeData);
+
+      // Ouvre une nouvelle fenêtre d'impression
+      const printWindow = window.open("", "_blank");
+      if (!printWindow) {
+        throw new Error("Impossible d'ouvrir la fenêtre d'impression");
+      }
+
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Impression Colis ${colis.id}</title>
+            <style>
+              ${modalStyles}
+              body { margin: 20px; }
+              .print-container { max-width: 500px; margin: auto; }
+              .qr-code-img { width: 150px; height: 150px; }
+            </style>
+          </head>
+          <body>
+            <div class="modal-content print-container">
+              <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 16px;">
+                <h1 style="font-size: 1.5rem; font-weight: bold; color: #1f2937; display: flex; align-items: center; gap: 8px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#f97316" viewBox="0 0 24 24"><path d="M4 2v6h-2v8h2v6h16v-6h2v-8h-2v-6h-16zm2 2h12v6h-12v-6zm0 8h12v6h-12v-6zm-2 8h16v2h-16v-2z"/></svg>
+                  Détails du colis
+                </h1>
+                <p style="color: #4b5563;">Consultez les informations détaillées du colis et son QR code.</p>
+              </div>
+              <div style="padding: 24px 0; display: grid; gap: 16px;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#6b7280" viewBox="0 0 24 24"><path d="M17 2h-10v2h-2v18h14v-18h-2v-2zm-8 2h6v2h-6v-2zm-2 4h10v12h-10v-12z"/></svg>
+                  <div style="flex: 1;">
+                    <span style="font-weight: 600; color: #374151;">ID</span>
+                    <p style="color: #111827;">${colis.id}</p>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#6b7280" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-3.31 0-6 2.69-6 6v2h12v-2c0-3.31-2.69-6-6-6z"/></svg>
+                  <div style="flex: 1;">
+                    <span style="font-weight: 600; color: #374151;">Destinataire</span>
+                    <p style="color: #111827;">${
+                      colis.nom_destinataire || "Non spécifié"
+                    }</p>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#6b7280" viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.15 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1v3.43c0 .55-.45 1-1 1-9.94 0-18-8.06-18-18 0-.55.45-1 1-1h3.43c.55 0 1 .45 1 1 0 1.24.2 2.45.57 3.57.12.35.03.74-.24 1.02l-2.2 2.2z"/></svg>
+                  <div style="flex: 1;">
+                    <span style="font-weight: 600; color: #374151;">Téléphone</span>
+                    <p style="color: #111827;">${
+                      colis.numero_tel_destinataire || "Non spécifié"
+                    }</p>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#6b7280" viewBox="0 0 24 24"><path d="M12 2c-3.87 0-7 3.13-7 7 0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                  <div style="flex: 1;">
+                    <span style="font-weight: 600; color: #374151;">Ville</span>
+                    <p style="color: #111827;">${
+                      colis.ville_destination || "Non spécifié"
+                    }</p>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#6b7280" viewBox="0 0 24 24"><path d="M17 2h-10v2h-2v18h14v-18h-2v-2zm-8 2h6v2h-6v-2zm-2 4h10v12h-10v-12z"/></svg>
+                  <div style="flex: 1;">
+                    <span style="font-weight: 600; color: #374151;">Statut</span>
+                    <span style="display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 0.875rem; font-weight: 500; ${getStatusColor(
+                      colis.statut
+                    )}">
+                      ${STATUT_LABELS[colis.statut ?? ""] || "Inconnu"}
+                    </span>
+                  </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#6b7280" viewBox="0 0 24 24"><path d="M19 3h-14c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-14c0-1.1-.9-2-2-2zm-10 2h6v2h-6v-2zm8 14h-12v-12h12v12z"/></svg>
+                  <div style="flex: 1;">
+                    <span style="font-weight: 600; color: #374151;">Date de création</span>
+                    <p style="color: #111827;">${
+                      new Date(colis.createdAt).toLocaleDateString("fr-FR", {
+                        day: "2-digit",
+                        month: "long",
+                        year: "numeric",
+                      }) || "Non spécifié"
+                    }</p>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top: 24px;">
+                <span style="font-weight: 600; color: #374151; display: block; margin-bottom: 8px;">QR Code</span>
+                <div style="display: flex; justify-content: center; background-color: #f9fafb; padding: 16px; border-radius: 0.5rem;">
+                  <img src="${qrCodeImage}" class="qr-code-img" alt="QR Code du colis" />
+                </div>
+                <p style="font-size: 0.875rem; color: #6b7280; margin-top: 8px; text-align: center;">
+                  Scannez ce QR code pour accéder aux informations du colis (ID : ${
+                    colis.id
+                  }).
+                </p>
+              </div>
+            </div>
+            <script>console.log("Fenêtre d'impression ouverte, contenu chargé");</script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      printWindow.print();
+      printWindow.onafterprint = () => printWindow.close();
+      toast.update(loadingToast, {
+        render: "Impression prête",
+        type: "success",
+        isLoading: false,
+        autoClose: 3000,
+      });
+    } catch (error: any) {
+      console.error("Erreur lors de la préparation de l'impression:", error);
+      toast.update(loadingToast, {
+        render: `Échec de l'impression: ${error.message}`,
+        type: "error",
+        isLoading: false,
+        autoClose: 3000,
+      });
     }
   };
 
@@ -195,6 +457,19 @@ export default function ColisPage() {
                   onChange={(e) => setSearch(e.target.value)}
                   className="transition-all duration-200 focus:ring-2 focus:ring-orange-500"
                   aria-label="Rechercher un destinataire"
+                />
+              </div>
+              <div className="flex flex-col gap-2 w-full sm:w-80">
+                <Label htmlFor="phoneFilter">
+                  Rechercher un numéro de téléphone
+                </Label>
+                <Input
+                  id="phoneFilter"
+                  placeholder="🔍 Entrez un numéro..."
+                  value={phoneFilter}
+                  onChange={(e) => setPhoneFilter(e.target.value)}
+                  className="transition-all duration-200 focus:ring-2 focus:ring-orange-500"
+                  aria-label="Rechercher un numéro de téléphone"
                 />
               </div>
               <div className="flex flex-col gap-2 w-full sm:w-48">
@@ -314,6 +589,7 @@ export default function ColisPage() {
                                       setSelectedColisId(colis.id);
                                       setIsDetailsModalOpen(true);
                                     }}
+                                    aria-label="Voir les détails du colis"
                                   >
                                     <FaEye className="h-4 w-4" />
                                   </Button>
@@ -331,7 +607,12 @@ export default function ColisPage() {
                               </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button variant="outline" size="icon">
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() => handlePrintColis(colis)}
+                                    aria-label="Imprimer les détails du colis"
+                                  >
                                     <FaPrint className="h-4 w-4" />
                                   </Button>
                                 </TooltipTrigger>
@@ -346,6 +627,7 @@ export default function ColisPage() {
                                       setColisToDeleteId(colis.id);
                                       setIsDeleteModalOpen(true);
                                     }}
+                                    aria-label="Supprimer le colis"
                                   >
                                     <FaTrash className="h-4 w-4" />
                                   </Button>
@@ -360,7 +642,6 @@ export default function ColisPage() {
               </Table>
             </div>
 
-            {/* Modal de confirmation de suppression */}
             <Dialog
               open={isDeleteModalOpen}
               onOpenChange={setIsDeleteModalOpen}
@@ -419,7 +700,7 @@ export default function ColisPage() {
                 ◀ Précédent
               </Button>
               <span className="text-sm text-gray-600">
-                Page {page} / {pagination?.totalPages ?? 1}
+                Page {page} / {pagination?.totalPages || 1}
               </span>
               <Button
                 variant="outline"

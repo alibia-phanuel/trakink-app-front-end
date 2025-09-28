@@ -20,16 +20,11 @@ import {
   FaCalendarAlt,
   FaQrcode,
 } from "react-icons/fa";
-import { QRCodeSVG } from "qrcode.react";
+import { QRCodeCanvas } from "qrcode.react";
 import html2canvas from "html2canvas";
+import { toast } from "react-toastify";
 
-interface ColisDetailsModalProps {
-  selectedColis: Colis | undefined;
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  getStatusColor: (statut?: string) => string;
-}
-
+// Define status labels
 const STATUT_LABELS: Record<string, string> = {
   COLLIS_AJOUTE: "Colis ajouté",
   QUITTE_CHINE: "Quitté la Chine",
@@ -43,11 +38,11 @@ const modalStyles = `
     color: #000000 !important;
     background-color: #ffffff !important;
     border-color: #000000 !important;
-    font-family: Arial, Helvetica, sans-serif !important; /* Standard font for better rendering */
-    transform: none !important; /* Remove transforms */
-    opacity: 1 !important; /* Ensure full opacity */
-    -webkit-font-smoothing: antialiased !important; /* Improve font rendering */
-    text-rendering: optimizeLegibility !important; /* Optimize text for clarity */
+    font-family: Arial, Helvetica, sans-serif !important;
+    transform: none !important;
+    opacity: 1 !important;
+    -webkit-font-smoothing: antialiased !important;
+    text-rendering: optimizeLegibility !important;
   }
   .modal-content .text-gray-500 { color: #6b7280 !important; }
   .modal-content .text-gray-600 { color: #4b5563 !important; }
@@ -73,6 +68,13 @@ const modalStyles = `
   .modal-content .rounded-full { border-radius: 9999px !important; }
 `;
 
+interface ColisDetailsModalProps {
+  selectedColis: Colis | undefined;
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  getStatusColor: (statut?: string) => string; // Fix: Return string
+}
+
 export default function ColisDetailsModal({
   selectedColis,
   isOpen,
@@ -85,18 +87,28 @@ export default function ColisDetailsModal({
         id: selectedColis.id,
         nom_destinataire: selectedColis.nom_destinataire,
         statut: selectedColis.statut,
+        numero_tel_destinataire: selectedColis.numero_tel_destinataire,
+        ville_destination: selectedColis.ville_destination,
       })
     : "";
 
   // Function to download the modal content as an image
   const handleDownloadImage = async () => {
     const element = document.querySelector(".modal-content") as HTMLElement;
-    if (!element) return;
+    if (!element) {
+      toast.error("Contenu de la modale introuvable");
+      return;
+    }
+
+    // Wait for DOM to be fully rendered (handles Next.js hydration)
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Inject CSS styles to override oklch and optimize rendering
     const styleElement = document.createElement("style");
     styleElement.innerHTML = modalStyles;
     document.head.appendChild(styleElement);
+
+    const loadingToast = toast.loading("Génération de l'image...");
 
     try {
       // Ensure the element is fully visible before capture
@@ -107,30 +119,66 @@ export default function ColisDetailsModal({
 
       const canvas = await html2canvas(element, {
         backgroundColor: "#ffffff",
-        scale: window.devicePixelRatio * 3, // Increase scale based on DPR
+        scale: window.devicePixelRatio * 2,
         useCORS: true,
-        logging: false, // Disable logging for cleaner console
-        windowWidth: 500, // Set explicit window width
-        windowHeight: element.scrollHeight, // Use element height
+        logging: true,
+        windowWidth: 500,
+        windowHeight: element.scrollHeight,
       });
 
       // Convert canvas to image
-      const image = canvas.toDataURL("image/png", 1.0); // Use maximum quality
+      const dataUrl = canvas.toDataURL("image/png", 1.0);
       const link = document.createElement("a");
-      link.href = image;
+      link.href = dataUrl;
       link.download = `colis_${selectedColis?.id || "details"}.png`;
       link.click();
-    } catch (error) {
-      console.error("Erreur lors de la génération de l'image :", error);
+
+      toast.update(loadingToast, {
+        render: "Image téléchargée avec succès",
+        type: "success",
+        isLoading: false,
+        autoClose: 3000,
+      });
+    } catch (err: any) {
+      console.error("Erreur html2canvas :", {
+        error: err,
+        message: err?.message || "No message provided",
+        stack: err?.stack || "No stack trace available",
+        name: err?.name || "Unknown",
+        elementExists: !!element,
+        elementInnerHTML: element?.innerHTML?.substring(0, 100) || "N/A",
+      });
+      toast.update(loadingToast, {
+        render: `Échec de la génération de l'image : ${
+          err?.message || "Erreur inconnue"
+        }`,
+        type: "error",
+        isLoading: false,
+        autoClose: 3000,
+      });
     } finally {
-      // Clean up styles and reset element
+      const originalStyle = {
+        display: element.style.display,
+        position: element.style.position,
+        width: element.style.width,
+        padding: element.style.padding,
+      };
+
+      // Ensure the element is fully visible before capture
+      element.style.display = "block";
+      element.style.position = "relative";
+      element.style.width = "500px"; // Match sm:max-w-[500px]
+      element.style.padding = "20px"; // Add padding for better appearance
+      // Clean up styles and restore original element styles
       document.head.removeChild(styleElement);
-      element.style.display = "";
-      element.style.position = "";
-      element.style.width = "";
-      element.style.padding = "";
+      element.style.display = originalStyle.display;
+      element.style.position = originalStyle.position;
+      element.style.width = originalStyle.width;
+      element.style.padding = originalStyle.padding;
     }
   };
+
+  // Function to print the modal content
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -226,7 +274,7 @@ export default function ColisDetailsModal({
               </Label>
               <div className="flex justify-center bg-gray-50 p-4 rounded-lg">
                 {qrCodeData && (
-                  <QRCodeSVG
+                  <QRCodeCanvas
                     value={qrCodeData}
                     size={150}
                     bgColor="#f9fafb"
@@ -256,6 +304,7 @@ export default function ColisDetailsModal({
           >
             Télécharger en image
           </Button>
+
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
