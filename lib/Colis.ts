@@ -135,12 +135,12 @@ export interface UpdateStatutResult {
 /**
  * Met à jour le statut d'un colis
  * @param id ID du colis
- * @param statut Nouveau statut : "RECU_DESTINATION" | "QUITTE_CHINE"
+ * @param statut Nouveau statut : "QUITTE_CHINE" | "RECU_DESTINATION"
  * @returns Objet avec data (payload) et status (HTTP)
  */
 export const updateColisStatut = async (
   id: string,
-  statut: "RECU_DESTINATION" | "QUITTE_CHINE"
+  statut: "QUITTE_CHINE" | "RECU_DESTINATION"
 ): Promise<UpdateStatutResult> => {
   try {
     const response = await API.patch<UpdateStatutResponse>(

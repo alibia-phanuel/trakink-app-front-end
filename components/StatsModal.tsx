@@ -33,7 +33,7 @@ const StatsModal: React.FC<StatsModalProps> = ({ stats, onClose }) => {
             <strong>Pays inactifs :</strong> {stats.paysInactifs}
           </p>
           <p>
-            <strong>Taux d'activation :</strong> {stats.tauxActivation}%
+            <strong>Taux d&apos;activation :</strong> {stats.tauxActivation}%
           </p>
 
           <div className="mt-2">
