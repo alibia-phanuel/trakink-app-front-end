@@ -26,7 +26,7 @@ export interface ColisInput {
   taille: number;
   images_colis: string[];
   imageId?: string[];
- statut?: ColisStatut;
+  statut?: ColisStatut;
   dureeTransportEstimee?: number | null;
   qrCodeData?: string | null;
   ajouteParId?: string;
@@ -55,6 +55,7 @@ export interface Pagination {
   itemsPerPage: number;
   hasNext: boolean;
   hasPrev: boolean;
+  total: number;
 }
 
 export interface GetColisParams {
@@ -70,6 +71,7 @@ export interface GetColisParams {
     | "pays_destination"
     | "statut";
   sortOrder?: "asc" | "desc";
+  signal?: AbortSignal;
 }
 
 export interface GetColisResponse {

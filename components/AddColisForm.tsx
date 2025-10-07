@@ -29,7 +29,8 @@ import {
 } from "@/components/ui/dialog";
 import { ColisPayload } from "@/type/colis";
 import { uploadImagesToCloudinary } from "@/lib/cloudinary";
-import { Switch } from "@/components/ui/switch"; // Ajout pour le toggle Express
+import { Switch } from "@/components/ui/switch";
+import { Colis } from "@/type/newColis";
 
 const colisSchema = z.object({
   nom_destinataire: z
@@ -72,7 +73,13 @@ type Country = {
   };
 };
 
-export default function ColisFormDialog() {
+interface ColisFormDialogProps {
+  onColisCreated: (newColis: Colis) => void;
+}
+
+export default function ColisFormDialog({
+  onColisCreated,
+}: ColisFormDialogProps) {
   return (
     <DialogContent className="w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 rounded-lg">
       <DialogHeader>
@@ -84,7 +91,7 @@ export default function ColisFormDialog() {
           les champs marqués d’un * sont obligatoires.
         </DialogDescription>
       </DialogHeader>
-      <ColisForm />
+      <ColisForm onColisCreated={onColisCreated} />
       <DialogFooter>
         <Button
           variant="outline"
@@ -97,7 +104,7 @@ export default function ColisFormDialog() {
   );
 }
 
-function ColisForm() {
+function ColisForm({ onColisCreated }: ColisFormDialogProps) {
   const {
     register,
     handleSubmit,
@@ -120,7 +127,7 @@ function ColisForm() {
   const [countries, setCountries] = useState<Country[]>([]);
   const [isLoadingCountries, setIsLoadingCountries] = useState(true);
   const [countryError, setCountryError] = useState<string | null>(null);
-  const [isExpress, setIsExpress] = useState(false); // Nouveau état pour Aérien express
+  const [isExpress, setIsExpress] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -129,64 +136,62 @@ function ColisForm() {
   const modeEnvoi = watch("mode_envoi");
   const paysDestination = watch("pays_destination");
 
-  // Unité dynamique pour affichage
   const uniteMesure = modeEnvoi === "Aérien" ? "kg" : "m³";
 
-  // Sample phone code mapping (extend with all countries from your API)
   const phoneCodeMapping: { [key: string]: string } = {
-    DZ: "+213", // Algérie
-    AO: "+244", // Angola
-    BJ: "+229", // Bénin
-    BW: "+267", // Botswana
-    BF: "+226", // Burkina Faso
-    BI: "+257", // Burundi
-    CM: "+237", // Cameroun
-    CV: "+238", // Cap-Vert
-    CF: "+236", // République Centrafricaine
-    TD: "+235", // Tchad
-    KM: "+269", // Comores
-    CD: "+243", // République Démocratique du Congo
-    DJ: "+253", // Djibouti
-    EG: "+20", // Égypte
-    GQ: "+240", // Guinée équatoriale
-    ER: "+291", // Érythrée
-    ET: "+251", // Éthiopie
-    GA: "+241", // Gabon
-    GM: "+220", // Gambie
-    GH: "+233", // Ghana
-    GN: "+224", // Guinée
-    GW: "+245", // Guinée-Bissau
-    KE: "+254", // Kenya
-    LS: "+266", // Lesotho
-    LR: "+231", // Libéria
-    LY: "+218", // Libye
-    MA: "+212", // Maroc
-    MG: "+261", // Madagascar
-    MW: "+265", // Malawi
-    ML: "+223", // Mali
-    MR: "+222", // Mauritanie
-    MU: "+230", // Maurice
-    MAU: "+262", // Mayotte
-    MZ: "+258", // Mozambique
-    NA: "+264", // Namibie
-    NE: "+227", // Niger
-    NG: "+234", // Nigéria
-    RW: "+250", // Rwanda
-    ST: "+239", // Sao Tomé-et-Principe
-    SN: "+221", // Sénégal
-    SC: "+248", // Seychelles
-    SL: "+232", // Sierra Leone
-    SO: "+252", // Somalie
-    ZA: "+27", // Afrique du Sud
-    SS: "+211", // Soudan du Sud
-    SD: "+249", // Soudan
-    SZ: "+268", // Eswatini
-    TZ: "+255", // Tanzanie
-    TG: "+228", // Togo
-    TN: "+216", // Tunisie
-    UG: "+256", // Ouganda
-    ZM: "+260", // Zambie
-    ZW: "+263", // Zimbabwe
+    DZ: "+213",
+    AO: "+244",
+    BJ: "+229",
+    BW: "+267",
+    BF: "+226",
+    BI: "+257",
+    CM: "+237",
+    CV: "+238",
+    CF: "+236",
+    TD: "+235",
+    KM: "+269",
+    CD: "+243",
+    DJ: "+253",
+    EG: "+20",
+    GQ: "+240",
+    ER: "+291",
+    ET: "+251",
+    GA: "+241",
+    GM: "+220",
+    GH: "+233",
+    GN: "+224",
+    GW: "+245",
+    KE: "+254",
+    LS: "+266",
+    LR: "+231",
+    LY: "+218",
+    MA: "+212",
+    MG: "+261",
+    MW: "+265",
+    ML: "+223",
+    MR: "+222",
+    MU: "+230",
+    MAU: "+262",
+    MZ: "+258",
+    NA: "+264",
+    NE: "+227",
+    NG: "+234",
+    RW: "+250",
+    ST: "+239",
+    SN: "+221",
+    SC: "+248",
+    SL: "+232",
+    SO: "+252",
+    ZA: "+27",
+    SS: "+211",
+    SD: "+249",
+    SZ: "+268",
+    TZ: "+255",
+    TG: "+228",
+    TN: "+216",
+    UG: "+256",
+    ZM: "+260",
+    ZW: "+263",
   };
 
   const fetchAllCountries = async () => {
@@ -303,15 +308,11 @@ function ColisForm() {
 
   const onSubmit = async (data: ColisFormValues) => {
     try {
-      // 🔹 Upload les images sélectionnées vers Cloudinary
       const uploadedImages = await uploadImagesToCloudinary(images);
-
-      // 🔹 On filtre les null au cas où certains uploads échouent
       const successImages = uploadedImages.filter(
         (img): img is { url: string; imageId: string } => img !== null
       );
 
-      // Définition automatique des valeurs
       const nomColisDefault = "Colis standard";
       const uniteMesureAuto = modeEnvoi === "Aérien" ? "kg" : "m³";
       const dureeAuto = modeEnvoi === "Maritime" ? 60 : isExpress ? 5 : 14;
@@ -320,32 +321,60 @@ function ColisForm() {
         nom_destinataire: data.nom_destinataire,
         numero_tel_destinataire: `${data.code_pays.replace("+", "")}${
           data.numero_tel_destinataire
-        }`, // sans "+"
+        }`,
         email_destinataire: data.email_destinataire,
         pays_destination: data.pays_destination,
         ville_destination: data.ville_destination,
         adresse_destinataire:
-          data.ville_destination + " " + "de la pars de chris CCI",
-        nom_colis: nomColisDefault, // Valeur par défaut
+          data.ville_destination + " de la part de chris CCI",
+        nom_colis: nomColisDefault,
         nature_colis: data.nature_colis,
         mode_envoi: data.mode_envoi,
-        unite_mesure: uniteMesureAuto, // Automatique
+        unite_mesure: uniteMesureAuto,
         taille: data.taille,
-        images_colis: successImages.map((img) => img.url), // ✅ URLs Cloudinary
-        imageId: successImages.map((img) => img.imageId), // ✅ IDs Cloudinary
-        dureeTransportEstimee: dureeAuto, // Automatique
+        images_colis: successImages.map((img) => img.url),
+        imageId: successImages.map((img) => img.imageId),
+        dureeTransportEstimee: dureeAuto,
       };
 
-      console.log("les données du colis", payload);
-      await createColis(payload);
+      const response = await createColis(payload);
+
+      // Create the Colis object to match the expected type in ColisPage
+      const newColis: Colis = {
+        id: response.colis.id, // Assuming the API returns the new colis ID
+        nom_destinataire: data.nom_destinataire,
+        numero_tel_destinataire: `${data.code_pays}${data.numero_tel_destinataire}`,
+        email_destinataire: data.email_destinataire,
+        pays_destination: data.pays_destination,
+        ville_destination: data.ville_destination,
+        adresse_destinataire:
+          data.ville_destination + " de la part de chris CCI",
+        nom_colis: nomColisDefault,
+        nature_colis: data.nature_colis,
+        mode_envoi: data.mode_envoi,
+        unite_mesure: uniteMesureAuto,
+        taille: data.taille,
+        images_colis: successImages.map((img) => img.url),
+        imageId: successImages.map((img) => img.imageId),
+        dureeTransportEstimee: dureeAuto,
+        statut: "COLLIS_AJOUTE", // Default status for new colis
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Trigger the parent callback to update the colis list
+      onColisCreated(newColis);
 
       toast.success("Colis créé avec succès !");
       reset();
       setImages([]);
       setPreviewUrls([]);
+      setIsExpress(false);
+
+      // Close the dialog
+      window.dispatchEvent(new Event("close-dialog"));
     } catch (err: unknown) {
       toast.error("Erreur lors de la création du colis");
-
       if (err instanceof Error) {
         console.error("Message:", err.message);
       } else {
@@ -510,26 +539,6 @@ function ColisForm() {
               </p>
             )}
           </div>
-          <div className="md:col-span-2 hidden">
-            <Label
-              htmlFor="adresse_destinataire"
-              className="text-sm font-medium"
-            >
-              Adresse *
-            </Label>
-            {/* <Input
-              {...register("adresse_destinataire")}
-              id="adresse_destinataire"
-              placeholder="123 Rue Exemple, 75001"
-              className="mt-1"
-              aria-invalid={!!errors.adresse_destinataire}
-            />
-            {errors.adresse_destinataire && (
-              <p className="text-red-500 text-sm mt-1">
-                {errors.adresse_destinataire.message}
-              </p>
-            )} */}
-          </div>
         </CardContent>
       </Card>
 
@@ -565,7 +574,7 @@ function ColisForm() {
             <Select
               onValueChange={(value: ModeEnvoi) => {
                 setValue("mode_envoi", value);
-                setIsExpress(false); // Réinitialiser express si mode change
+                setIsExpress(false);
               }}
               defaultValue="Aérien"
             >

@@ -28,6 +28,7 @@ export interface ColisPayload {
 }
 
 export interface ColisResponse {
+ 
   message: string;
   colis: {
     id: string;
