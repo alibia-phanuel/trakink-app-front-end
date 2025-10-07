@@ -54,7 +54,7 @@ import { useDebounce } from "use-debounce";
 import { QRCodeCanvas } from "qrcode.react";
 import { isValidDate } from "@/utils/isValidDate";
 
-// Inline CSS styles for printing (inchangé)
+// Inline CSS styles for printing (unchanged)
 const modalStyles = `...`; // Omitted for brevity
 
 const STATUT_OPTIONS = [
@@ -108,13 +108,12 @@ export default function ColisPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [colisToDeleteId, setColisToDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isAddColisOpen, setIsAddColisOpen] = useState(false);
 
   const [debouncedSearch] = useDebounce(search, 500);
   const [debouncedPhoneFilter] = useDebounce(phoneFilter, 500);
 
-  // Callback pour gérer la création d'un nouveau colis
   const handleColisCreated = (newColis: Colis) => {
-    // Vérifier si le nouveau colis correspond aux filtres actuels
     const created = new Date(newColis.createdAt);
     const matchesSearch =
       !debouncedSearch ||
@@ -134,11 +133,9 @@ export default function ColisPage() {
       (!endDate || (isValidDate(endDate) && created <= new Date(endDate)));
 
     if (matchesSearch && matchesPhone && matchesStatus && matchesDate) {
-      // Ajouter le nouveau colis en haut de la liste, en respectant la limite de la page
       setColisList((prev) => [newColis, ...prev].slice(0, limit));
     }
 
-    // Mettre à jour la pagination pour refléter le nouveau compte total
     setPagination((prev) => {
       if (!prev) return prev;
       return {
@@ -147,50 +144,9 @@ export default function ColisPage() {
         totalPages: Math.ceil((prev.total + 1) / limit),
       };
     });
+
+    setIsAddColisOpen(false);
   };
-
-  // Callback pour gérer la mise à jour d'un colis
-  // const handleColisUpdated = (updatedColis: Colis) => {
-  //   // Vérifier si le colis mis à jour correspond aux filtres actuels
-  //   const created = new Date(updatedColis.createdAt);
-  //   const matchesSearch =
-  //     !debouncedSearch ||
-  //     updatedColis.nom_destinataire
-  //       .toLowerCase()
-  //       .includes(debouncedSearch.toLowerCase());
-  //   const matchesPhone =
-  //     !debouncedPhoneFilter ||
-  //     updatedColis.numero_tel_destinataire
-  //       .toLowerCase()
-  //       .includes(debouncedPhoneFilter.toLowerCase());
-  //   const matchesStatus =
-  //     statutFilter === "TOUS" || updatedColis.statut === statutFilter;
-  //   const matchesDate =
-  //     (!startDate ||
-  //       (isValidDate(startDate) && created >= new Date(startDate))) &&
-  //     (!endDate || (isValidDate(endDate) && created <= new Date(endDate)));
-
-  //   setColisList((prev) => {
-  //     // Trouver l'index du colis existant
-  //     const index = prev.findIndex((colis) => colis.id === updatedColis.id);
-  //     if (index === -1) {
-  //       // Si le colis n'est pas dans la liste actuelle, ne rien faire
-  //       return prev;
-  //     }
-
-  //     if (matchesSearch && matchesPhone && matchesStatus && matchesDate) {
-  //       // Remplacer le colis existant par le colis mis à jour
-  //       const newList = [...prev];
-  //       newList[index] = updatedColis;
-  //       return newList;
-  //     } else {
-  //       // Si le colis ne correspond plus aux filtres, le retirer de la liste
-  //       return prev.filter((colis) => colis.id !== updatedColis.id);
-  //     }
-  //   });
-
-  //   // Pas besoin de modifier la pagination, car le nombre total de colis reste inchangé
-  // };
 
   const fetchColis = async (signal?: AbortSignal) => {
     try {
@@ -219,7 +175,6 @@ export default function ColisPage() {
 
       setColisList(filteredColis);
       setPagination(data.pagination);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
       if (err.name === "AbortError") {
         console.warn("Requête annulée, ignorée");
@@ -254,7 +209,6 @@ export default function ColisPage() {
       const response = await deleteColis(colisToDeleteId);
       setIsDeleteModalOpen(false);
       setColisToDeleteId(null);
-      // Mise à jour en temps réel pour la suppression
       setColisList((prev) =>
         prev.filter((colis) => colis.id !== colisToDeleteId)
       );
@@ -267,7 +221,6 @@ export default function ColisPage() {
         };
       });
       toast.success(response.message);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
       console.error("Erreur lors de la suppression du colis:", error);
       toast.error(error.message || "Échec de la suppression du colis");
@@ -276,7 +229,6 @@ export default function ColisPage() {
     }
   };
 
-  // Fonction pour générer une image base64 du QR code (inchangée)
   const generateQRCodeImage = (data: string): Promise<string> => {
     return new Promise((resolve, reject) => {
       const container = document.createElement("div");
@@ -319,21 +271,23 @@ export default function ColisPage() {
     });
   };
 
-  // Fonction pour gérer l'impression (inchangée)
+  // Fonction pour gérer l'impression avec taille prédéfinie de 70mm x 90mm
   const handlePrintColis = async (colis: Colis) => {
+    // Afficher un toast de chargement pendant la préparation
     const loadingToast = toast.loading("Préparation de l'impression...");
     try {
+      // Vérifier que les données essentielles du colis sont présentes (statut non requis)
       if (
         !colis.id ||
         !colis.nom_destinataire ||
         !colis.numero_tel_destinataire ||
         !colis.ville_destination ||
-        !colis.statut ||
         !colis.createdAt
       ) {
         throw new Error("Données du colis incomplètes");
       }
 
+      // Créer les données pour le QR code avec les informations du colis
       const qrCodeData = JSON.stringify({
         id: colis.id,
         nom_destinataire: colis.nom_destinataire,
@@ -342,82 +296,95 @@ export default function ColisPage() {
         statut: colis.statut,
       });
 
+      // Générer l'image du QR code en base64
       const qrCodeImage = await generateQRCodeImage(qrCodeData);
 
+      // Ouvrir une nouvelle fenêtre pour l'impression
       const printWindow = window.open("", "_blank");
       if (!printWindow) {
         throw new Error("Impossible d'ouvrir la fenêtre d'impression");
       }
 
+      // Écrire le contenu HTML dans la fenêtre d'impression avec taille 70mm x 90mm
       printWindow.document.write(`
         <html>
           <head>
             <title>Impression Colis ${colis.id}</title>
             <style>
               ${modalStyles}
-              body { margin: 20px; }
-              .print-container { max-width: 500px; margin: auto; }
-              .qr-code-img { width: 150px; height: 150px; }
+              body { margin: 0; padding: 5mm; box-sizing: border-box; }
+              .print-container { 
+                width: 70mm; 
+                height: 90mm; 
+                margin: auto; 
+                font-size: 10px; 
+                line-height: 1.2; 
+                padding: 5mm; 
+                box-sizing: border-box;
+                border: 1px solid #e5e7eb;
+              }
+              .qr-code-img { width: 30mm; height: 30mm; } /* Augmenter la taille du QR code */
+              h1 { font-size: 12px; margin-bottom: 4px; }
+              p, span { font-size: 9px; }
+              .info-row { 
+                display: flex; 
+                align-items: flex-start; 
+                gap: 4px; 
+                margin-bottom: 6px; 
+              }
+              .info-row svg { flex-shrink: 0; }
+              .info-content { flex: 1; }
             </style>
           </head>
           <body>
-            <div class="modal-content print-container">
-              <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 16px;">
-                <h1 style="font-size: 1.5rem; font-weight: bold; color: #1f2937; display: flex; align-items: center; gap: 8px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#f97316" viewBox="0 0 24 24"><path d="M4 2v6h-2v8h2v6h16v-6h2v-8h-2v-6h-16zm2 2h12v6h-12v-6zm0 8h12v6h-12v-6zm-2 8h16v2h-16v-2z"/></svg>
+            <div class="print-container">
+              <!-- Entête avec titre et description -->
+              <div style="border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;">
+                <h1 style="font-weight: bold; color: #1f2937; display: flex; align-items: center; gap: 4px;">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="#f97316" viewBox="0 0 24 24"><path d="M4 2v6h-2v8h2v6h16v-6h2v-8h-2v-6h-16zm2 2h12v6h-12v-6zm0 8h12v6h-12v-6zm-2 8h16v2h-16v-2z"/></svg>
                   Détails du colis
                 </h1>
-                <p style="color: #4b5563;">Consultez les informations détaillées du colis et son QR code.</p>
+                <p style="color: #4b5563;">Informations du colis et QR code.</p>
               </div>
-              <div style="padding: 24px 0; display: grid; gap: 16px;">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#6b7280" viewBox="0 0 24 24"><path d="M17 2h-10v2h-2v18h14v-18h-2v-2zm-8 2h6v2h-6v-2zm-2 4h10v12h-10v-12z"/></svg>
-                  <div style="flex: 1;">
+              <!-- Section des informations du colis -->
+              <div style="padding: 8px 0; display: grid; gap: 6px;">
+                <div class="info-row">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="#6b7280" viewBox="0 0 24 24"><path d="M17 2h-10v2h-2v18h14v-18h-2v-2zm-8 2h6v2h-6v-2zm-2 4h10v12h-10v-12z"/></svg>
+                  <div class="info-content">
                     <span style="font-weight: 600; color: #374151;">ID</span>
                     <p style="color: #111827;">${colis.id}</p>
                   </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#6b7280" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-3.31 0-6 2.69-6 6v2h12v-2c0-3.31-2.69-6-6-6z"/></svg>
-                  <div style="flex: 1;">
+                <div class="info-row">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="#6b7280" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-3.31 0-6 2.69-6 6v2h12v-2c0-3.31-2.69-6-6-6z"/></svg>
+                  <div class="info-content">
                     <span style="font-weight: 600; color: #374151;">Destinataire</span>
                     <p style="color: #111827;">${
                       colis.nom_destinataire || "Non spécifié"
                     }</p>
                   </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#6b7280" viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.15 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1v3.43c0 .55-.45 1-1 1-9.94 0-18-8.06-18-18 0-.55.45-1 1-1h3.43c.55 0 1 .45 1 1 0 1.24.2 2.45.57 3.57.12.35.03.74-.24 1.02l-2.2 2.2z"/></svg>
-                  <div style="flex: 1;">
+                <div class="info-row">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="#6b7280" viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.15 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1v3.43c0 .55-.45 1-1 1-9.94 0-18-8.06-18-18 0-.55.45-1 1-1h3.43c.55 0 1 .45 1 1 0 1.24.2 2.45.57 3.57.12.35.03.74-.24 1.02l-2.2 2.2z"/></svg>
+                  <div class="info-content">
                     <span style="font-weight: 600; color: #374151;">Téléphone</span>
                     <p style="color: #111827;">${
                       colis.numero_tel_destinataire || "Non spécifié"
                     }</p>
                   </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#6b7280" viewBox="0 0 24 24"><path d="M12 2c-3.87 0-7 3.13-7 7 0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-                  <div style="flex: 1;">
+                <div class="info-row">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="#6b7280" viewBox="0 0 24 24"><path d="M12 2c-3.87 0-7 3.13-7 7 0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                  <div class="info-content">
                     <span style="font-weight: 600; color: #374151;">Ville</span>
                     <p style="color: #111827;">${
                       colis.ville_destination || "Non spécifié"
                     }</p>
                   </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#6b7280" viewBox="0 0 24 24"><path d="M17 2h-10v2h-2v18h14v-18h-2v-2zm-8 2h6v2h-6v-2zm-2 4h10v12h-10v-12z"/></svg>
-                  <div style="flex: 1;">
-                    <span style="font-weight: 600; color: #374151;">Statut</span>
-                    <span style="display: inline-block; padding: 4px 12px; border-radius: 9999px; font-size: 0.875rem; font-weight: 500; ${getStatusColor(
-                      colis.statut
-                    )}">
-                      ${STATUT_LABELS[colis.statut ?? ""] || "Inconnu"}
-                    </span>
-                  </div>
-                </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="#6b7280" viewBox="0 0 24 24"><path d="M19 3h-14c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-14c0-1.1-.9-2-2-2zm-10 2h6v2h-6v-2zm8 14h-12v-12h12v12z"/></svg>
-                  <div style="flex: 1;">
+                <div class="info-row">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" fill="#6b7280" viewBox="0 0 24 24"><path d="M19 3h-14c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-14c0-1.1-.9-2-2-2zm-10 2h6v2h-6v-2zm8 14h-12v-12h12v12z"/></svg>
+                  <div class="info-content">
                     <span style="font-weight: 600; color: #374151;">Date de création</span>
                     <p style="color: #111827;">${
                       new Date(colis.createdAt).toLocaleDateString("fr-FR", {
@@ -429,15 +396,14 @@ export default function ColisPage() {
                   </div>
                 </div>
               </div>
-              <div style="margin-top: 24px;">
-                <span style="font-weight: 600; color: #374151; display: block; margin-bottom: 8px;">QR Code</span>
-                <div style="display: flex; justify-content: center; background-color: #f9fafb; padding: 16px; border-radius: 0.5rem;">
+              <!-- Section QR code -->
+              <div style="margin-top: 6px; display: flex; flex-direction: column; align-items: center;">
+                <span style="font-weight: 600; color: #374151; display: block; margin-bottom: 4px;">QR Code</span>
+                <div style="background-color: #f9fafb; padding: 3mm; border-radius: 0.25rem;">
                   <img src="${qrCodeImage}" class="qr-code-img" alt="QR Code du colis" />
                 </div>
-                <p style="font-size: 0.875rem; color: #6b7280; margin-top: 8px; text-align: center;">
-                  Scannez ce QR code pour accéder aux informations du colis (ID : ${
-                    colis.id
-                  }).
+                <p style="font-size: 8px; color: #6b7280; margin-top: 4px; text-align: center;">
+                  Scannez pour infos (ID: ${colis.id}).
                 </p>
               </div>
             </div>
@@ -445,10 +411,12 @@ export default function ColisPage() {
           </body>
         </html>
       `);
+      // Fermer le document et lancer l'impression
       printWindow.document.close();
       printWindow.focus();
       printWindow.print();
       printWindow.onafterprint = () => printWindow.close();
+      // Mettre à jour le toast pour indiquer le succès
       toast.update(loadingToast, {
         render: "Impression prête",
         type: "success",
@@ -456,6 +424,7 @@ export default function ColisPage() {
         autoClose: 3000,
       });
     } catch (error: any) {
+      // Gérer les erreurs d'impression et mettre à jour le toast
       console.error("Erreur lors de la préparation de l'impression:", error);
       toast.update(loadingToast, {
         render: `Échec de l'impression: ${error.message}`,
@@ -480,16 +449,16 @@ export default function ColisPage() {
             <CardTitle className="text-2xl font-bold text-gray-800">
               📦 Gestion des Colis
             </CardTitle>
-            <Dialog>
+            <Dialog open={isAddColisOpen} onOpenChange={setIsAddColisOpen}>
               <DialogTrigger asChild>
                 <Button className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white transition-all duration-200">
                   <FaPlus className="mr-2 h-4 w-4" /> Ajouter Colis
                 </Button>
               </DialogTrigger>
-              <DialogContent className="w-[80%] max-w-5xl h-[90%]">
+              <DialogContent className="w-[80%] max-w-3xl overflow-hidden">
                 <DialogHeader>
                   <DialogTitle>Ajouter un nouveau colis</DialogTitle>
-                  <DialogDescription>
+                  <DialogDescription id="dialog-description">
                     Remplissez les informations ci-dessous pour enregistrer un
                     colis.
                   </DialogDescription>

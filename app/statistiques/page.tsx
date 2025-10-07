@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -256,7 +257,7 @@ const Page = () => {
                 htmlFor="modeEnvoi"
               >
                 <Truck className="mr-1 h-4 w-4" />
-                Mode d'envoi:
+                Mode d&apos;envoi:
               </label>
               <Select
                 value={modeEnvoiFilter}
@@ -434,7 +435,7 @@ const Page = () => {
                       <p className="text-2xl">{paysStats.paysInactifs}</p>
                     </Card>
                     <Card className="p-2 text-center">
-                      <p className="font-semibold">Taux d'activation</p>
+                      <p className="font-semibold">Taux d&apos;activation</p>
                       <p className="text-2xl">{paysStats.tauxActivation}%</p>
                     </Card>
                   </div>

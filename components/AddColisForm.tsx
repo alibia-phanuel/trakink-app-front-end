@@ -25,7 +25,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogFooter,
 } from "@/components/ui/dialog";
 import { ColisPayload } from "@/type/colis";
 import { uploadImagesToCloudinary } from "@/lib/cloudinary";
@@ -53,7 +52,9 @@ const colisSchema = z.object({
   images_colis: z.array(z.string()).optional(),
   imageId: z.array(z.string()).optional(),
 });
-
+type ColisFormDialogProps = {
+  onColisCreated: (newColis: Colis) => void;
+};
 type ColisFormValues = z.infer<typeof colisSchema>;
 type ModeEnvoi = ColisFormValues["mode_envoi"];
 type Country = {
@@ -73,15 +74,11 @@ type Country = {
   };
 };
 
-interface ColisFormDialogProps {
-  onColisCreated: (newColis: Colis) => void;
-}
-
 export default function ColisFormDialog({
   onColisCreated,
 }: ColisFormDialogProps) {
   return (
-    <DialogContent className="w-full max-w-3xl max-h-[90vh] overflow-y-auto p-6 rounded-lg">
+    <DialogContent className="w-[80%] max-w-3xl p-6 rounded-lg">
       <DialogHeader>
         <DialogTitle className="text-2xl font-semibold">
           Ajouter un nouveau colis
@@ -92,14 +89,6 @@ export default function ColisFormDialog({
         </DialogDescription>
       </DialogHeader>
       <ColisForm onColisCreated={onColisCreated} />
-      <DialogFooter>
-        <Button
-          variant="outline"
-          onClick={() => window.dispatchEvent(new Event("close-dialog"))}
-        >
-          Annuler
-        </Button>
-      </DialogFooter>
     </DialogContent>
   );
 }
@@ -123,15 +112,12 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
 
   const [images, setImages] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
-  const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [countries, setCountries] = useState<Country[]>([]);
   const [isLoadingCountries, setIsLoadingCountries] = useState(true);
   const [countryError, setCountryError] = useState<string | null>(null);
   const [isExpress, setIsExpress] = useState(false);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
 
   const modeEnvoi = watch("mode_envoi");
   const paysDestination = watch("pays_destination");
@@ -201,8 +187,9 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
       let allCountries: Country[] = [];
       let page = 1;
       let hasNext = true;
+      const maxPages = 100;
 
-      while (hasNext) {
+      while (hasNext && page <= maxPages) {
         const response = await getCountries(page, 10);
         const activeCountries = response.pays.filter(
           (country: Country) => country.status === "ACTIF"
@@ -210,6 +197,10 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
         allCountries = [...allCountries, ...activeCountries];
         hasNext = response.pagination.hasNext;
         page += 1;
+      }
+
+      if (page > maxPages) {
+        console.warn("Max page limit reached for country fetching.");
       }
 
       setCountries(allCountries);
@@ -245,6 +236,9 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return;
     const selectedFiles = Array.from(e.target.files).slice(0, 5);
+    if (e.target.files.length > 5) {
+      toast.warn("Vous ne pouvez uploader que 5 images maximum.");
+    }
     setImages((prev) => [...prev, ...selectedFiles].slice(0, 5));
     setPreviewUrls((prev) =>
       [
@@ -261,6 +255,9 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
     const selectedFiles = Array.from(e.dataTransfer.files)
       .filter((file) => file.type.startsWith("image/"))
       .slice(0, 5);
+    if (e.dataTransfer.files.length > 5) {
+      toast.warn("Vous ne pouvez uploader que 5 images maximum.");
+    }
     setImages((prev) => [...prev, ...selectedFiles].slice(0, 5));
     setPreviewUrls((prev) =>
       [
@@ -275,40 +272,13 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
     setPreviewUrls((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const closeCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    setIsCameraOpen(false);
-  };
-
-  const capturePhoto = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas
-      .getContext("2d")
-      ?.drawImage(video, 0, 0, canvas.width, canvas.height);
-    canvas.toBlob((blob) => {
-      if (blob) {
-        const file = new File([blob], `photo-${Date.now()}.jpg`, {
-          type: "image/jpeg",
-        });
-        setImages((prev) => [...prev, file].slice(0, 5));
-        setPreviewUrls((prev) =>
-          [...prev, URL.createObjectURL(file)].slice(0, 5)
-        );
-        closeCamera();
-      }
-    }, "image/jpeg");
-  };
-
   const onSubmit = async (data: ColisFormValues) => {
     try {
+      setIsUploadingImages(true);
       const uploadedImages = await uploadImagesToCloudinary(images);
+      if (uploadedImages.some((img) => img === null)) {
+        throw new Error("Échec du téléchargement de certaines images.");
+      }
       const successImages = uploadedImages.filter(
         (img): img is { url: string; imageId: string } => img !== null
       );
@@ -339,9 +309,8 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
 
       const response = await createColis(payload);
 
-      // Create the Colis object to match the expected type in ColisPage
       const newColis: Colis = {
-        id: response.colis.id, // Assuming the API returns the new colis ID
+        id: response.colis.id,
         nom_destinataire: data.nom_destinataire,
         numero_tel_destinataire: `${data.code_pays}${data.numero_tel_destinataire}`,
         email_destinataire: data.email_destinataire,
@@ -357,12 +326,11 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
         images_colis: successImages.map((img) => img.url),
         imageId: successImages.map((img) => img.imageId),
         dureeTransportEstimee: dureeAuto,
-        statut: "COLLIS_AJOUTE", // Default status for new colis
+        statut: "COLLIS_AJOUTE",
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
-      // Trigger the parent callback to update the colis list
       onColisCreated(newColis);
 
       toast.success("Colis créé avec succès !");
@@ -371,353 +339,338 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
       setPreviewUrls([]);
       setIsExpress(false);
 
-      // Close the dialog
       window.dispatchEvent(new Event("close-dialog"));
     } catch (err: unknown) {
-      toast.error("Erreur lors de la création du colis");
+      let errorMessage = "Erreur lors de la création du colis";
       if (err instanceof Error) {
+        errorMessage = err.message;
         console.error("Message:", err.message);
       } else {
         console.error("Erreur inconnue:", err);
       }
+      toast.error(errorMessage);
+    } finally {
+      setIsUploadingImages(false);
     }
   };
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-6">
-      {/* Informations destinataire */}
-      <Card className="w-full shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg font-medium">
-            Informations du destinataire
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="nom_destinataire" className="text-sm font-medium">
-              Nom complet *
-            </Label>
-            <Input
-              {...register("nom_destinataire")}
-              id="nom_destinataire"
-              placeholder="Jean Dupont"
-              className="mt-1"
-              aria-invalid={!!errors.nom_destinataire}
-            />
-            {errors.nom_destinataire && (
-              <p className="text-red-500 text-sm mt-1">
-                {errors.nom_destinataire.message}
-              </p>
-            )}
-          </div>
-          <div>
-            <Label htmlFor="pays_destination" className="text-sm font-medium">
-              Pays *
-            </Label>
-            <Select
-              onValueChange={(value) => setValue("pays_destination", value)}
-              defaultValue="Ghana"
-              disabled={isLoadingCountries || !!countryError}
-            >
-              <SelectTrigger
-                className="mt-1"
-                aria-invalid={!!errors.pays_destination}
-              >
-                <SelectValue
-                  placeholder={
-                    isLoadingCountries
-                      ? "Chargement des pays..."
-                      : countryError
-                      ? "Erreur de chargement"
-                      : "Sélectionner un pays"
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                {countries.map((country) => (
-                  <SelectItem key={country.id} value={country.nom}>
-                    <div className="flex items-center gap-2">
-                      <Flag country={country.code} size={20} />
-                      {country.nom}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.pays_destination && (
-              <p className="text-red-500 text-sm mt-1">
-                {errors.pays_destination.message}
-              </p>
-            )}
-            {countryError && (
-              <div className="flex items-center gap-2 mt-1">
-                <p className="text-red-500 text-sm">{countryError}</p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={fetchAllCountries}
-                  aria-label="Réessayer le chargement des pays"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <div className="w-1/3">
-              <Label htmlFor="code_pays" className="text-sm font-medium">
-                Code *
-              </Label>
-              <Input
-                {...register("code_pays")}
-                id="code_pays"
-                placeholder="+233"
-                className="mt-1"
-                readOnly
-                aria-invalid={!!errors.code_pays}
-              />
-              {errors.code_pays && (
-                <p className="text-red-500 text-sm mt-1">
-                  {errors.code_pays.message}
-                </p>
-              )}
-            </div>
-            <div className="flex-1">
-              <Label
-                htmlFor="numero_tel_destinataire"
-                className="text-sm font-medium"
-              >
-                Téléphone *
-              </Label>
-              <Input
-                {...register("numero_tel_destinataire")}
-                id="numero_tel_destinataire"
-                placeholder="123456789"
-                className="mt-1"
-                aria-invalid={!!errors.numero_tel_destinataire}
-              />
-              {errors.numero_tel_destinataire && (
-                <p className="text-red-500 text-sm mt-1">
-                  {errors.numero_tel_destinataire.message}
-                </p>
-              )}
-            </div>
-          </div>
-          <div>
-            <Label htmlFor="email_destinataire" className="text-sm font-medium">
-              Email *
-            </Label>
-            <Input
-              {...register("email_destinataire")}
-              id="email_destinataire"
-              placeholder="exemple@domaine.com"
-              type="email"
-              className="mt-1"
-              aria-invalid={!!errors.email_destinataire}
-            />
-            {errors.email_destinataire && (
-              <p className="text-red-500 text-sm mt-1">
-                {errors.email_destinataire.message}
-              </p>
-            )}
-          </div>
-          <div>
-            <Label htmlFor="ville_destination" className="text-sm font-medium">
-              Ville *
-            </Label>
-            <Input
-              {...register("ville_destination")}
-              id="ville_destination"
-              placeholder="Paris"
-              className="mt-1"
-              aria-invalid={!!errors.ville_destination}
-            />
-            {errors.ville_destination && (
-              <p className="text-red-500 text-sm mt-1">
-                {errors.ville_destination.message}
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Informations colis */}
-      <Card className="w-full shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg font-medium">
-            Informations sur le colis
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="nature_colis" className="text-sm font-medium">
-              Nature du colis *
-            </Label>
-            <Input
-              {...register("nature_colis")}
-              id="nature_colis"
-              placeholder="Électronique, vêtements, etc."
-              className="mt-1"
-              aria-invalid={!!errors.nature_colis}
-            />
-            {errors.nature_colis && (
-              <p className="text-red-500 text-sm mt-1">
-                {errors.nature_colis.message}
-              </p>
-            )}
-          </div>
-          <div>
-            <Label htmlFor="mode_envoi" className="text-sm font-medium">
-              Mode d’envoi *
-            </Label>
-            <Select
-              onValueChange={(value: ModeEnvoi) => {
-                setValue("mode_envoi", value);
-                setIsExpress(false);
-              }}
-              defaultValue="Aérien"
-            >
-              <SelectTrigger
-                className="mt-1"
-                aria-invalid={!!errors.mode_envoi}
-              >
-                <SelectValue placeholder="Sélectionner un mode" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Maritime">Maritime</SelectItem>
-                <SelectItem value="Aérien">Aérien</SelectItem>
-              </SelectContent>
-            </Select>
-            {errors.mode_envoi && (
-              <p className="text-red-500 text-sm mt-1">
-                {errors.mode_envoi.message}
-              </p>
-            )}
-          </div>
-          {modeEnvoi === "Aérien" && (
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card className="w-full shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-medium">
+              Informations du destinataire
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-4">
             <div>
-              <Label htmlFor="express" className="text-sm font-medium">
-                Mode express (5 jours au lieu de 14)
+              <Label htmlFor="nom_destinataire" className="text-sm font-medium">
+                Nom complet *
               </Label>
-              <Switch
-                id="express"
-                checked={isExpress}
-                onCheckedChange={setIsExpress}
-                className="mt-1"
-              />
-            </div>
-          )}
-          <div>
-            <Label htmlFor="taille" className="text-sm font-medium">
-              Taille ({uniteMesure}) *
-            </Label>
-            <Input
-              {...register("taille", { valueAsNumber: true })}
-              id="taille"
-              type="number"
-              step="0.1"
-              placeholder="10.5"
-              className="mt-1"
-              aria-invalid={!!errors.taille}
-            />
-            {errors.taille && (
-              <p className="text-red-500 text-sm mt-1">
-                {errors.taille.message}
-              </p>
-            )}
-          </div>
-          <div className="md:col-span-2">
-            <Label htmlFor="images_colis" className="text-sm font-medium">
-              Images du colis (max 5)
-            </Label>
-            <div className="flex gap-2 mb-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2"
-              >
-                <Upload className="h-5 w-5" />
-                Ajouter des images
-              </Button>
-            </div>
-            <div
-              className="border-2 border-dashed rounded-lg p-4 flex flex-col items-center justify-center hover:bg-gray-50 transition-colors"
-              onDrop={handleDrop}
-              onDragOver={(e) => e.preventDefault()}
-            >
-              <Upload className="h-8 w-8 mb-2 text-gray-500" />
-              <p className="text-sm text-gray-500">
-                Glissez-déposez ou cliquez pour ajouter des images
-              </p>
               <Input
-                id="images_colis"
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={handleImageChange}
-                className="hidden"
-                ref={fileInputRef}
+                {...register("nom_destinataire")}
+                id="nom_destinataire"
+                placeholder="Jean Dupont"
+                className="mt-1"
+                aria-invalid={!!errors.nom_destinataire}
               />
+              {errors.nom_destinataire && (
+                <p className="text-red-500 text-sm mt-1">
+                  {errors.nom_destinataire.message}
+                </p>
+              )}
             </div>
-
-            {isCameraOpen && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white p-4 rounded-lg max-w-lg w-full">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-medium">Prendre une photo</h3>
-                    <Button
-                      variant="ghost"
-                      onClick={closeCamera}
-                      aria-label="Fermer la caméra"
-                    >
-                      <X className="h-5 w-5" />
-                    </Button>
-                  </div>
-                  <video ref={videoRef} className="w-full rounded" autoPlay />
-                  <canvas ref={canvasRef} className="hidden" />
-                  <div className="flex justify-end gap-2 mt-4">
-                    <Button variant="outline" onClick={closeCamera}>
-                      Annuler
-                    </Button>
-                    <Button onClick={capturePhoto}>Capturer</Button>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div className="flex gap-2 mt-2 flex-wrap">
-              {previewUrls.map((url, idx) => (
-                <div key={idx} className="relative">
-                  <img
-                    src={url}
-                    alt={`preview-${idx}`}
-                    className="h-20 w-20 object-cover rounded"
+            <div>
+              <Label htmlFor="pays_destination" className="text-sm font-medium">
+                Pays *
+              </Label>
+              <Select
+                onValueChange={(value) => setValue("pays_destination", value)}
+                defaultValue="Ghana"
+                disabled={isLoadingCountries || !!countryError}
+              >
+                <SelectTrigger
+                  className="mt-1"
+                  aria-invalid={!!errors.pays_destination}
+                >
+                  <SelectValue
+                    placeholder={
+                      isLoadingCountries
+                        ? "Chargement des pays..."
+                        : countryError
+                        ? "Erreur de chargement"
+                        : "Sélectionner un pays"
+                    }
                   />
+                </SelectTrigger>
+                <SelectContent>
+                  {countries.map((country) => (
+                    <SelectItem key={country.id} value={country.nom}>
+                      <div className="flex items-center gap-2">
+                        <Flag country={country.code} size={20} />
+                        {country.nom}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.pays_destination && (
+                <p className="text-red-500 text-sm mt-1">
+                  {errors.pays_destination.message}
+                </p>
+              )}
+              {countryError && (
+                <div className="flex items-center gap-2 mt-1">
+                  <p className="text-red-500 text-sm">{countryError}</p>
                   <Button
+                    type="button"
                     variant="ghost"
-                    size="icon"
-                    className="absolute top-0 right-0 bg-red-500 text-white rounded-full"
-                    onClick={() => handleRemoveImage(idx)}
-                    aria-label={`Supprimer l'image ${idx + 1}`}
+                    size="sm"
+                    onClick={fetchAllCountries}
+                    aria-label="Réessayer le chargement des pays"
                   >
-                    <X className="h-4 w-4" />
+                    <RefreshCw className="h-4 w-4" />
                   </Button>
                 </div>
-              ))}
+              )}
             </div>
-          </div>
-        </CardContent>
-      </Card>
+            <div className="flex gap-2">
+              <div className="w-1/3">
+                <Label htmlFor="code_pays" className="text-sm font-medium">
+                  Code *
+                </Label>
+                <Input
+                  {...register("code_pays")}
+                  id="code_pays"
+                  placeholder="+233"
+                  className="mt-1"
+                  readOnly
+                  aria-invalid={!!errors.code_pays}
+                />
+                {errors.code_pays && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.code_pays.message}
+                  </p>
+                )}
+              </div>
+              <div className="flex-1">
+                <Label
+                  htmlFor="numero_tel_destinataire"
+                  className="text-sm font-medium"
+                >
+                  Téléphone *
+                </Label>
+                <Input
+                  {...register("numero_tel_destinataire")}
+                  id="numero_tel_destinataire"
+                  placeholder="123456789"
+                  className="mt-1"
+                  aria-invalid={!!errors.numero_tel_destinataire}
+                />
+                {errors.numero_tel_destinataire && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.numero_tel_destinataire.message}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div>
+              <Label
+                htmlFor="email_destinataire"
+                className="text-sm font-medium"
+              >
+                Email *
+              </Label>
+              <Input
+                {...register("email_destinataire")}
+                id="email_destinataire"
+                placeholder="exemple@domaine.com"
+                type="email"
+                className="mt-1"
+                aria-invalid={!!errors.email_destinataire}
+              />
+              {errors.email_destinataire && (
+                <p className="text-red-500 text-sm mt-1">
+                  {errors.email_destinataire.message}
+                </p>
+              )}
+            </div>
+            <div>
+              <Label
+                htmlFor="ville_destination"
+                className="text-sm font-medium"
+              >
+                Ville *
+              </Label>
+              <Input
+                {...register("ville_destination")}
+                id="ville_destination"
+                placeholder="Paris"
+                className="mt-1"
+                aria-invalid={!!errors.ville_destination}
+              />
+              {errors.ville_destination && (
+                <p className="text-red-500 text-sm mt-1">
+                  {errors.ville_destination.message}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
-      {/* Boutons */}
+        <Card className="w-full shadow-sm">
+          <CardHeader>
+            <CardTitle className="text-lg font-medium">
+              Informations sur le colis
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-4">
+            <div>
+              <Label htmlFor="nature_colis" className="text-sm font-medium">
+                Nature du colis *
+              </Label>
+              <Input
+                {...register("nature_colis")}
+                id="nature_colis"
+                placeholder="Électronique, vêtements, etc."
+                className="mt-1"
+                aria-invalid={!!errors.nature_colis}
+              />
+              {errors.nature_colis && (
+                <p className="text-red-500 text-sm mt-1">
+                  {errors.nature_colis.message}
+                </p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="mode_envoi" className="text-sm font-medium">
+                Mode d’envoi *
+              </Label>
+              <Select
+                onValueChange={(value: ModeEnvoi) => {
+                  setValue("mode_envoi", value);
+                  setIsExpress(false);
+                }}
+                defaultValue="Aérien"
+              >
+                <SelectTrigger
+                  className="mt-1"
+                  aria-invalid={!!errors.mode_envoi}
+                >
+                  <SelectValue placeholder="Sélectionner un mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Maritime">Maritime</SelectItem>
+                  <SelectItem value="Aérien">Aérien</SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.mode_envoi && (
+                <p className="text-red-500 text-sm mt-1">
+                  {errors.mode_envoi.message}
+                </p>
+              )}
+            </div>
+            {modeEnvoi === "Aérien" && (
+              <div>
+                <Label htmlFor="express" className="text-sm font-medium">
+                  Mode express (5 jours au lieu de 14)
+                </Label>
+                <Switch
+                  id="express"
+                  checked={isExpress}
+                  onCheckedChange={setIsExpress}
+                  className="mt-1"
+                />
+              </div>
+            )}
+            <div>
+              <Label htmlFor="taille" className="text-sm font-medium">
+                Taille ({uniteMesure}) *
+              </Label>
+              <Input
+                {...register("taille", { valueAsNumber: true })}
+                id="taille"
+                type="number"
+                step="0.1"
+                placeholder="10.5"
+                className="mt-1"
+                aria-invalid={!!errors.taille}
+              />
+              {errors.taille && (
+                <p className="text-red-500 text-sm mt-1">
+                  {errors.taille.message}
+                </p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="images_colis" className="text-sm font-medium">
+                Images du colis (max 5 images)
+              </Label>
+              <div className="flex gap-2 mb-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-2"
+                >
+                  <Upload className="h-5 w-5" />
+                  Ajouter des images
+                </Button>
+              </div>
+              <div
+                onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
+                role="region"
+                aria-describedby="drag-drop-instructions"
+              >
+                <Input
+                  id="images_colis"
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  className="hidden"
+                  ref={fileInputRef}
+                />
+              </div>
+              <div className="flex gap-2 mt-2 flex-wrap">
+                {previewUrls.map((url, idx) => (
+                  <div key={idx} className="relative">
+                    <img
+                      src={url}
+                      alt={`preview-${idx}`}
+                      className="h-20 w-20 object-cover rounded"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-0 right-0 bg-red-500 text-white rounded-full"
+                      onClick={() => handleRemoveImage(idx)}
+                      aria-label={`Supprimer l'image ${idx + 1}`}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="flex justify-end gap-2">
         <Button
           type="submit"
-          disabled={isSubmitting || isLoadingCountries || !!countryError}
+          disabled={
+            isSubmitting ||
+            isLoadingCountries ||
+            !!countryError ||
+            isUploadingImages
+          }
           className="bg-primary hover:bg-primary-dark"
         >
-          {isSubmitting ? (
+          {isSubmitting || isUploadingImages ? (
             <>
               <svg
                 className="animate-spin h-5 w-5 mr-2 text-white"
@@ -737,7 +690,9 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
                   d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
                 />
               </svg>
-              Création...
+              {isUploadingImages
+                ? "Téléchargement des images..."
+                : "Création..."}
             </>
           ) : (
             "Créer le colis"
