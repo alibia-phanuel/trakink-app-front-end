@@ -13,17 +13,25 @@ export const createColis = async (
   data: ColisPayload
 ): Promise<ColisResponse> => {
   try {
+    console.log("Payload envoyé à l'API :", data); // Log du payload pour vérification
     const response: AxiosResponse<ColisResponse> = await API.post(
       "/colis",
       data
     );
     return response.data;
   } catch (error: any) {
-    console.error(
-      "Erreur lors de la création du colis :",
-      error.response?.data || error.message
+    console.error("Erreur lors de la création du colis :", {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      config: error.config, // Inclut l'URL, les headers, et le payload
+    });
+    throw new Error(
+      error.response?.data?.message ||
+        error.message ||
+        "Erreur inconnue lors de la création du colis"
     );
-    throw error;
   }
 };
 

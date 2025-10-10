@@ -31,6 +31,13 @@ import { uploadImagesToCloudinary } from "@/lib/cloudinary";
 import { Switch } from "@/components/ui/switch";
 import { Colis } from "@/type/newColis";
 
+// Fonction pour générer un trackingNumber
+const generateTrackingNumber = () => {
+  const prefix = "TRK";
+  const randomNum = Math.floor(100000000 + Math.random() * 900000000);
+  return `${prefix}${randomNum}`;
+};
+
 const colisSchema = z.object({
   nom_destinataire: z
     .string()
@@ -42,21 +49,29 @@ const colisSchema = z.object({
   email_destinataire: z.string().email("Adresse email invalide"),
   pays_destination: z.string().min(2, "Pays requis"),
   ville_destination: z.string().min(2, "Ville requise"),
-  nature_colis: z.string().min(2, "Nature du colis requise"),
+  nom_colis: z.string().min(2, "Nom du colis requis"),
+  nature_de_colis: z.enum(["Liquide", "Normal", "Batteries"], {
+    message: "Nature du colis requise",
+  }),
   mode_envoi: z.enum(["Maritime", "Aérien"], {
     message: "Mode d’envoi requis",
   }),
   taille: z
     .number({ invalid_type_error: "La taille doit être un nombre" })
     .positive("La taille doit être positive"),
+  trackingNumber: z.string().optional(),
   images_colis: z.array(z.string()).optional(),
   imageId: z.array(z.string()).optional(),
 });
+
 type ColisFormDialogProps = {
   onColisCreated: (newColis: Colis) => void;
 };
+
 type ColisFormValues = z.infer<typeof colisSchema>;
+
 type ModeEnvoi = ColisFormValues["mode_envoi"];
+
 type Country = {
   id: string;
   nom: string;
@@ -107,6 +122,8 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
       mode_envoi: "Aérien",
       code_pays: "+233", // Default to Ghana
       pays_destination: "Ghana",
+      nom_colis: "Colis standard",
+      nature_de_colis: "Normal",
     },
   });
 
@@ -272,6 +289,10 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
     setPreviewUrls((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleGenerateTrackingNumber = () => {
+    setValue("trackingNumber", generateTrackingNumber());
+  };
+
   const onSubmit = async (data: ColisFormValues) => {
     try {
       setIsUploadingImages(true);
@@ -283,7 +304,6 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
         (img): img is { url: string; imageId: string } => img !== null
       );
 
-      const nomColisDefault = "Colis standard";
       const uniteMesureAuto = modeEnvoi === "Aérien" ? "kg" : "m³";
       const dureeAuto = modeEnvoi === "Maritime" ? 60 : isExpress ? 5 : 14;
 
@@ -297,11 +317,12 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
         ville_destination: data.ville_destination,
         adresse_destinataire:
           data.ville_destination + " de la part de chris CCI",
-        nom_colis: nomColisDefault,
-        nature_colis: data.nature_colis,
+        nom_colis: data.nom_colis,
+        nature_colis: data.nature_de_colis,
         mode_envoi: data.mode_envoi,
         unite_mesure: uniteMesureAuto,
         taille: data.taille,
+        trackingNumber: data.trackingNumber,
         images_colis: successImages.map((img) => img.url),
         imageId: successImages.map((img) => img.imageId),
         dureeTransportEstimee: dureeAuto,
@@ -318,11 +339,12 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
         ville_destination: data.ville_destination,
         adresse_destinataire:
           data.ville_destination + " de la part de chris CCI",
-        nom_colis: nomColisDefault,
-        nature_colis: data.nature_colis,
+        nom_colis: data.nom_colis,
+        nature_colis: data.nature_de_colis,
         mode_envoi: data.mode_envoi,
         unite_mesure: uniteMesureAuto,
         taille: data.taille,
+        trackingNumber: data.trackingNumber,
         images_colis: successImages.map((img) => img.url),
         imageId: successImages.map((img) => img.imageId),
         dureeTransportEstimee: dureeAuto,
@@ -518,7 +540,6 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
             </div>
           </CardContent>
         </Card>
-
         <Card className="w-full shadow-sm">
           <CardHeader>
             <CardTitle className="text-lg font-medium">
@@ -527,19 +548,50 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-4">
             <div>
-              <Label htmlFor="nature_colis" className="text-sm font-medium">
-                Nature du colis *
+              <Label htmlFor="nom_colis" className="text-sm font-medium">
+                Nom du colis *
               </Label>
               <Input
-                {...register("nature_colis")}
-                id="nature_colis"
-                placeholder="Électronique, vêtements, etc."
+                {...register("nom_colis")}
+                id="nom_colis"
+                placeholder="Colis standard"
                 className="mt-1"
-                aria-invalid={!!errors.nature_colis}
+                aria-invalid={!!errors.nom_colis}
               />
-              {errors.nature_colis && (
+              {errors.nom_colis && (
                 <p className="text-red-500 text-sm mt-1">
-                  {errors.nature_colis.message}
+                  {errors.nom_colis.message}
+                </p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="nature_de_colis" className="text-sm font-medium">
+                Nature du colis *
+              </Label>
+              <Select
+                onValueChange={(value) =>
+                  setValue(
+                    "nature_de_colis",
+                    value as "Liquide" | "Normal" | "Batteries"
+                  )
+                }
+                defaultValue="Normal"
+              >
+                <SelectTrigger
+                  className="mt-1"
+                  aria-invalid={!!errors.nature_de_colis}
+                >
+                  <SelectValue placeholder="Sélectionner la nature du colis" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Liquide">Liquide</SelectItem>
+                  <SelectItem value="Normal">Normal</SelectItem>
+                  <SelectItem value="Batteries">Batteries</SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.nature_de_colis && (
+                <p className="text-red-500 text-sm mt-1">
+                  {errors.nature_de_colis.message}
                 </p>
               )}
             </div>
@@ -600,6 +652,35 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
               {errors.taille && (
                 <p className="text-red-500 text-sm mt-1">
                   {errors.taille.message}
+                </p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="trackingNumber" className="text-sm font-medium">
+                Numéro de suivi
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  {...register("trackingNumber")}
+                  id="trackingNumber"
+                  placeholder="TRK123456789"
+                  className="mt-1"
+                  aria-invalid={!!errors.trackingNumber}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleGenerateTrackingNumber}
+                  className="mt-1"
+                  aria-label="Générer un numéro de suivi"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Générer
+                </Button>
+              </div>
+              {errors.trackingNumber && (
+                <p className="text-red-500 text-sm mt-1">
+                  {errors.trackingNumber.message}
                 </p>
               )}
             </div>

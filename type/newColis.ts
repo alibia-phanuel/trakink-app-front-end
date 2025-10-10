@@ -32,6 +32,7 @@ export interface ColisInput {
   ajouteParId?: string;
   modifieParId?: string | null;
   livrerParId?: string | null;
+  trackingNumber?: string;
 }
 
 export interface ColisResponse {

@@ -25,6 +25,7 @@ export interface ColisPayload {
   images_colis: string[];
   imageId?: string[];
   dureeTransportEstimee?: number; // <-- optionnel mais validé par le formula
+  trackingNumber?: string;
 }
 
 export interface ColisResponse {
