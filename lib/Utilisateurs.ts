@@ -56,16 +56,25 @@ export const createUser = async (userData: UserPayload): Promise<Users> => {
     return response.data.user;
   } catch (error: any) {
     const status = error?.response?.status;
+    const backendMessage =
+      error?.response?.data?.message ||
+      error?.response?.data?.error ||
+      "Aucun message retourné par le serveur";
+
+    console.error("Erreur lors de la création de l'utilisateur :", {
+      status,
+      backendMessage,
+      data: error?.response?.data,
+    });
 
     if (status === 400) {
-      throw new Error("Données invalides.");
+      throw new Error(`Données invalides : ${backendMessage}`);
     } else if (status === 403) {
-      throw new Error("Permissions insuffisantes.");
+      throw new Error(`Permissions insuffisantes : ${backendMessage}`);
     } else if (status === 409) {
-      throw new Error("Email ou téléphone déjà utilisé.");
+      throw new Error(`Conflit : ${backendMessage}`);
     } else {
-      console.error("Erreur lors de la création de l'utilisateur :", error);
-      throw new Error("Erreur serveur lors de la création.");
+      throw new Error(`Erreur serveur lors de la création : ${backendMessage}`);
     }
   }
 };
