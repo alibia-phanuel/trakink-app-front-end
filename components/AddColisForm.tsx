@@ -207,7 +207,7 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
       const maxPages = 100;
 
       while (hasNext && page <= maxPages) {
-        const response = await getCountries(page, 10);
+        const response = await getCountries(page);
         const activeCountries = response.pays.filter(
           (country: Country) => country.status === "ACTIF"
         );
@@ -219,8 +219,8 @@ function ColisForm({ onColisCreated }: ColisFormDialogProps) {
       if (page > maxPages) {
         console.warn("Max page limit reached for country fetching.");
       }
-
-      setCountries(allCountries);
+      const allCountriesReverse = [...allCountries].reverse();
+      setCountries(allCountriesReverse);
       setIsLoadingCountries(false);
       if (allCountries.length === 0) {
         setCountryError("Aucun pays actif trouvé.");

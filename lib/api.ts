@@ -6,7 +6,7 @@ interface CustomAxiosRequestConfig extends AxiosRequestConfig {
   _retry?: boolean;
 }
 const API = axios.create({
-  baseURL: "https://logistique-app.vercel.app/api",
+  baseURL: "https://www.logistique.blog/api",
   withCredentials: true,
 });
 
